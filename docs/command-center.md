@@ -1,0 +1,67 @@
+# Command Center
+
+## Scope
+
+The command center separates machines, installed AI tools, CLI session instances,
+work tasks, and human approval. Existing CLI sessions still execute on the local
+machine. Remote machine registration is not remote execution: remote spawning,
+remote file access, remote CLI takeover and a runner transport are not implemented.
+The UI explicitly labels that limitation and disables remote spawn options.
+
+## Workflow
+
+1. Create a local CLI session in the Sessions view.
+2. Create a task with a goal, acceptance criteria and an existing session.
+3. Explicitly dispatch the queued task. Creation alone never sends instructions.
+4. Observe session output and rule-based alerts in the task list and detail view.
+5. Submit written evidence for review, then explicitly confirm acceptance.
+
+Task data and its timeline persist in SQLite (`work_tasks`). The unique active
+session index prevents two managed tasks from using the same session concurrently.
+This does not isolate different sessions sharing the same directory. Use separate
+workspaces for parallel modifications. Manual CLI prompts outside task dispatch
+are not blocked by this task scheduler.
+
+Stopping task tracking does NOT stop the CLI. Use the existing session stop and
+approval flow to stop the process. Review evidence is human-supplied text; the
+platform does not execute it or independently verify the tests it describes.
+
+## API
+
+All routes use the existing API authorization and Host checks.
+
+- `GET /tasks`: task records plus supervision observations.
+- `POST /tasks`: `title`, `objective`, `acceptance`, numeric `sessionId`, optional
+  `quietMinutes` (5 to 1440, default 15), and optional `actorId`.
+- `POST /tasks/:id/dispatch`: sends once to a ready local session.
+- `POST /tasks/:id/review`: requires non-empty `evidence`.
+- `POST /tasks/:id/complete`: requires review state and non-empty `evidence`.
+- `POST /tasks/:id/cancel`: ends tracking, requires non-empty `evidence`.
+
+Dispatch is reserved before sending. Ambiguous delivery is retained for manual
+inspection, never automatically retried. A server interruption can leave a task
+in `dispatching`; inspect the CLI before manually recovering the persisted task.
+A recovery UI for this state is not yet provided.
+
+## Supervision
+
+The command center refreshes data every 15 seconds while visible and uses the
+existing event stream. This is observation, not autonomous planning or execution.
+The server's existing supervisor must be enabled to obtain fresh CLI inspections.
+The preview can disable it to avoid interacting with real CLI sessions.
+
+Task observations distinguish missing/error/stopped sessions, idle sessions,
+long periods without recorded activity, pending review, and ambiguous dispatch.
+Unchanged session output/status no longer resets the activity timestamp on every
+inspection. These rules do not prove that an AI is stuck, nor do they infer task
+completion from an idle CLI. Permission requests continue through the existing
+approval UI; task-specific reasoning, automatic recovery, remote heartbeats,
+independent test execution and multi-machine scheduling remain future work.
+
+## Validation
+
+Task tests cover creation without execution, persistence, concurrent/duplicate
+dispatch, one active task per session, ambiguous delivery, invalid input, evidence
+requirements, supervision, activity timestamps and authenticated HTTP routes.
+UI checks use a separate temporary database and test adapters that do not send
+messages to real CLI processes. Never seed sample work into production data.

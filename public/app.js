@@ -1,4 +1,6 @@
 import { createApiTokenState } from './api-token-state.js';
+import { describeWork, selectWorkRows } from './work-status.js';
+import { createCommandCenter } from './command-center.js';
 
 class ApiResponseError extends Error {
   constructor(status, message) {
@@ -10,6 +12,10 @@ class ApiResponseError extends Error {
 
 const mobileMedia = window.matchMedia('(max-width: 1080px)');
 const apiTokenState = createApiTokenState({ localStorage, sessionStorage });
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('layout') === 'app' || mobileMedia.matches) {
+  document.body.classList.add('appShell');
+}
 
 const state = {
   actorId: localStorage.getItem('asb.actorId') || 'web-ui',
@@ -25,6 +31,8 @@ const state = {
   gitStatus: null,
   gitDiff: null,
   machines: [],
+  machinesLoaded: false,
+  machinesError: false,
   notificationPermission:
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   selectedFilePath: '',
@@ -43,6 +51,15 @@ const state = {
   voiceRecognition: null,
   workspaceBrowserPath: '',
   workspaceEntries: [],
+  workFilter: 'all',
+  workQuery: '',
+  workLoaded: false,
+  workError: '',
+  workSyncedAt: null,
+  approvalsLoaded: false,
+  approvalsError: false,
+  pendingApprovals: [],
+  view: 'overview',
 };
 
 const elements = {
@@ -149,12 +166,18 @@ const elements = {
   workspaceInput: document.querySelector('#workspaceInput'),
 };
 
+const commandCenter = createCommandCenter({
+  getState: () => state, apiGet, apiPost, selectSession, showView,
+  refreshAll: () => refreshAll({ silent: true }),
+});
+
 elements.actorInput.value = state.actorId;
 elements.apiTokenInput.value = apiTokenState.get();
 elements.actorEcho.textContent = state.actorId;
 elements.heroActor.textContent = state.actorId;
 
 bindEvents();
+showView('overview');
 syncResponsiveChrome();
 connectEventStream();
 registerPwa();
@@ -162,6 +185,30 @@ syncNotificationStatus();
 void refreshAll();
 
 function bindEvents() {
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    button.addEventListener('click', () => showView(button.dataset.view));
+  });
+  document.querySelectorAll('[data-work-filter]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.workFilter = button.dataset.workFilter;
+      renderWorkOverview();
+    });
+  });
+  document.querySelector('#workSearch').addEventListener('input', (event) => {
+    state.workQuery = event.target.value;
+    renderWorkOverview();
+  });
+  document.querySelector('#newWorkButton').addEventListener('click', () => {
+    document.querySelector('#createSessionDetails').open = true;
+    setSheetOpen(true);
+    elements.sessionNameInput.focus();
+  });
+  document.querySelector('#workInspectButton').addEventListener('click', () => {
+    void runSupervisor();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') setSheetOpen(false);
+  });
   elements.actorInput.addEventListener('input', () => {
     state.actorId = elements.actorInput.value.trim() || 'web-ui';
     localStorage.setItem('asb.actorId', state.actorId);
@@ -171,6 +218,7 @@ function bindEvents() {
 
   elements.apiTokenInput.addEventListener('change', () => {
     apiTokenState.set(elements.apiTokenInput.value);
+    commandCenter.reset();
     connectEventStream();
     void refreshAll();
   });
@@ -484,6 +532,9 @@ async function refreshAll(options = {}) {
     state.health = health;
     state.sessions = Array.isArray(sessionsPayload.sessions) ? sessionsPayload.sessions : [];
     state.snapshots = Array.isArray(sessionsPayload.snapshots) ? sessionsPayload.snapshots : [];
+    state.workLoaded = true;
+    state.workError = '';
+    state.workSyncedAt = new Date();
 
     if (state.selectedName && !state.sessions.some((session) => session.name === state.selectedName)) {
       state.selectedName = '';
@@ -502,10 +553,25 @@ async function refreshAll(options = {}) {
       refreshButler({ silent: true }),
       refreshMachines({ silent: true }),
       refreshTerminalCommands({ silent: true }),
+      commandCenter.refresh(),
     ]);
+    commandCenter.render();
     await refreshWorkspacePanel({ silent: options.silent });
   } catch (error) {
     const needsToken = error instanceof ApiResponseError && error.status === 401;
+    state.workError = needsToken ? '需要访问令牌，请在左侧访问配置中输入 API Token。'
+      : '无法连接服务。请检查后端是否启动，然后刷新。';
+    if (needsToken) {
+      state.sessions = [];
+      state.snapshots = [];
+      state.approvals = [];
+      state.pendingApprovals = [];
+      state.workLoaded = false;
+      state.approvalsLoaded = false;
+      document.querySelector('#accessDetails').open = true;
+    }
+    renderWorkOverview();
+    commandCenter.invalidate(needsToken);
     setPillState(
       elements.healthBadge,
       needsToken ? 'warn' : 'danger',
@@ -667,7 +733,8 @@ function renderSelectedSession() {
   }
 
   const snapshot = findSnapshot(session.name);
-  const observed = snapshot?.observedState || session.status;
+  const work = describeWork(session, snapshot, state.pendingApprovals);
+  const observed = work.observed;
   const label = `目标：${session.name}`;
   const activeText = formatDate(session.lastActiveAt);
   const digest = session.lastOutputDigest || snapshot?.note || '暂无输出摘要';
@@ -680,18 +747,110 @@ function renderSelectedSession() {
   elements.selectedDigest.textContent = digest;
   elements.heroSessionTitle.textContent = session.name;
   elements.heroSessionMeta.textContent = `最近活跃 ${activeText} · ${digest}`;
-  elements.heroStatus.textContent = observed;
+  elements.heroStatus.textContent = work.label;
   elements.heroWorkspacePath.textContent = session.workspacePath;
   setContextPill(elements.conversationSessionPill, '线程', session.name);
-  setContextPill(elements.conversationStatusPill, '状态', observed, badgeClass(observed));
+  setContextPill(elements.conversationStatusPill, '状态', work.label, badgeClass(observed));
   setContextPill(elements.conversationWorkspacePill, '目录', session.workspacePath);
   elements.chatInput.placeholder = `发送给 ${session.name}，Enter 发送`;
 
-  setPillState(elements.selectedBadge, badgeClass(observed), observed);
+  setPillState(elements.selectedBadge, badgeClass(observed), work.label);
   setPillState(elements.targetPill, badgeClass(observed), label);
 }
 
+function showView(view) {
+  state.view = view;
+  document.body.dataset.view = view;
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === view);
+    if (button.dataset.view === view) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  if (mobileMedia.matches) setSheetOpen(false);
+  commandCenter.render();
+}
+
+function workElement(tag, className, text) {
+  const element = document.createElement(tag);
+  element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function renderWorkOverview() {
+  const all = selectWorkRows(state.sessions, state.snapshots, state.pendingApprovals);
+  const rows = selectWorkRows(state.sessions, state.snapshots, state.pendingApprovals, state.workFilter, state.workQuery);
+  const setText = (id, value) => { document.getElementById(id).textContent = value; };
+  setText('workTotal', state.workLoaded ? String(all.length) : '—');
+  setText('workRunning', state.workLoaded ? String(all.filter(({ work }) => work.running).length) : '—');
+  setText('workAttention', state.workLoaded ? String(all.filter(({ work }) => work.attention).length) : '—');
+  setText('workPending', state.approvalsLoaded
+    ? `${state.pendingApprovals.length}${state.pendingApprovals.length >= 200 ? '+' : ''}` : '—');
+  setText('workResultCount', String(rows.length));
+  const sync = document.querySelector('#workSyncLabel');
+  sync.classList.toggle('isStale', Boolean(state.workError || state.approvalsError));
+  sync.textContent = state.workError
+    ? `${state.workError}${state.workLoaded ? ' 当前显示上次同步数据。' : ''}`
+    : state.approvalsError ? '审批加载失败，审批标记可能不是最新状态。'
+      : state.workSyncedAt ? `最近同步 ${state.workSyncedAt.toLocaleTimeString()} · 事件驱动更新`
+        : '正在连接本机服务…';
+  document.querySelectorAll('[data-work-filter]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.workFilter === state.workFilter));
+  });
+  const tbody = document.querySelector('#workTableBody');
+  tbody.replaceChildren();
+  for (const { session, work } of rows) {
+    const row = workElement('tr', session.name === state.selectedName ? 'selectedWork' : '');
+    const nameCell = workElement('td', 'workIdentity');
+    const nameButton = workElement('button', 'workName', session.name);
+    nameButton.type = 'button';
+    nameButton.addEventListener('click', () => selectSession(session.name));
+    const path = workElement('span', 'workPath', session.workspacePath);
+    path.title = session.workspacePath;
+    nameCell.append(nameButton, path);
+    const statusCell = workElement('td', 'workState');
+    statusCell.append(
+      workElement('span', `workStatus ${work.group}`, work.label),
+      workElement('span', 'workAgent', session.agentType || 'codex'),
+    );
+    const outputCell = workElement('td', 'workOutput');
+    const digest = workElement('p', 'workDigest', work.digest);
+    digest.title = work.digest;
+    outputCell.append(digest);
+    if (work.pending) {
+      const approvalButton = workElement('button', 'approvalLink', `${work.pending} 项待审批 →`);
+      approvalButton.type = 'button';
+      approvalButton.addEventListener('click', () => showView('approvals'));
+      outputCell.append(approvalButton);
+    }
+    const timeCell = workElement('td', 'workTime', formatCompactDate(session.lastActiveAt));
+    timeCell.title = formatDate(session.lastActiveAt);
+    const actionCell = workElement('td', 'workAction');
+    const open = workElement('button', 'textBtn', '打开 ↗');
+    open.type = 'button';
+    open.setAttribute('aria-label', `打开会话 ${session.name}`);
+    open.addEventListener('click', () => selectSession(session.name));
+    actionCell.append(open);
+    row.append(nameCell, statusCell, outputCell, timeCell, actionCell);
+    tbody.append(row);
+  }
+  const empty = document.querySelector('#workEmpty');
+  empty.hidden = rows.length > 0;
+  if (!rows.length) {
+    const title = !state.workLoaded
+      ? state.workError ? '服务尚未连接' : '正在读取工作情况'
+      : all.length ? '没有匹配的工作' : '还没有工作会话';
+    const copy = !state.workLoaded
+      ? state.workError || '连接后，会话状态与最近输出会显示在这里。'
+      : all.length ? '试试其他状态，或调整搜索关键词。'
+        : '点击「新建会话」，选择 Agent 和工作目录，开始第一项工作。';
+    empty.querySelector('h3').textContent = title;
+    empty.querySelector('p').textContent = copy;
+  }
+}
+
 function renderSessions() {
+  renderWorkOverview();
   elements.sessionsList.replaceChildren();
 
   const sessions = getFilteredSessions();
@@ -706,7 +865,8 @@ function renderSessions() {
 
   for (const session of sessions) {
     const snapshot = findSnapshot(session.name);
-    const observed = snapshot?.observedState || session.status;
+    const work = describeWork(session, snapshot, state.pendingApprovals);
+    const observed = work.observed;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `sessionCard ${session.name === state.selectedName ? 'active' : ''}`;
@@ -728,11 +888,7 @@ function renderSessions() {
 
     const badges = document.createElement('div');
     badges.className = 'sessionBadges';
-    badges.append(createMiniPill(session.status));
-
-    if (snapshot?.observedState) {
-      badges.append(createMiniPill(snapshot.observedState, true));
-    }
+    badges.append(createMiniPill(work.label));
 
     if (session.defaultForActor) {
       badges.append(createMiniPill('当前', true));
@@ -867,6 +1023,7 @@ function selectSession(sessionName) {
   state.workspaceBrowserPath = '';
   state.workspaceEntries = [];
   localStorage.setItem('asb.selectedName', sessionName);
+  showView('conversation');
   renderSelectedSession();
   renderSessions();
   renderChatFeed();
@@ -1262,10 +1419,19 @@ async function loadGitDiff(relativePath = '', options = {}) {
 
 async function refreshApprovals(options = {}) {
   try {
-    const payload = await apiGet('/approvals?status=all&limit=30');
-    state.approvals = Array.isArray(payload.approvals) ? payload.approvals : [];
+    const [payload, pendingPayload] = await Promise.all([
+      apiGet('/approvals?status=all&limit=30'),
+      apiGet('/approvals?status=pending&limit=200'),
+    ]);
+    state.pendingApprovals = Array.isArray(pendingPayload.approvals) ? pendingPayload.approvals : [];
+    const recent = Array.isArray(payload.approvals) ? payload.approvals : [];
+    state.approvals = [...new Map([...state.pendingApprovals, ...recent].map((item) => [item.id, item])).values()];
+    state.approvalsLoaded = true;
+    state.approvalsError = false;
     renderApprovals();
   } catch (error) {
+    state.approvalsError = true;
+    renderWorkOverview();
     if (!options.silent) {
       appendMessage('system', '审批加载失败', formatError(error));
     }
@@ -1294,8 +1460,12 @@ async function refreshMachines(options = {}) {
   try {
     const payload = await apiGet('/machines');
     state.machines = Array.isArray(payload.machines) ? payload.machines : [];
+    state.machinesLoaded = true;
+    state.machinesError = false;
     renderMachines();
   } catch (error) {
+    state.machinesError = true;
+    commandCenter.render();
     if (!options.silent) {
       appendMessage('system', '机器加载失败', formatError(error));
     }
@@ -2234,6 +2404,7 @@ function renderGitDiff() {
 }
 
 function renderApprovals() {
+  renderWorkOverview();
   const container = elements.approvalsList;
   container.replaceChildren();
 
@@ -2241,7 +2412,7 @@ function renderApprovals() {
   const recent = [
     ...pending,
     ...state.approvals.filter((approval) => approval.status !== 'pending').slice(0, 5),
-  ].slice(0, 10);
+  ];
 
   if (recent.length === 0) {
     container.className = 'stackedList empty';
@@ -2308,6 +2479,7 @@ function renderApprovals() {
 }
 
 function renderMachines() {
+  commandCenter.render();
   const container = elements.machinesList;
   container.replaceChildren();
   renderMachineOptions();
@@ -2366,8 +2538,9 @@ function renderMachineOptions() {
     const option = document.createElement('option');
     option.value = String(machine.id);
     option.textContent = `${machine.name} · ${machine.status}`;
-    if (machine.status !== 'online') {
+    if (machine.status !== 'online' || machine.name !== 'local') {
       option.disabled = true;
+      if (machine.name !== 'local') option.textContent += ' · 远程执行未接通';
     }
     select.append(option);
   }

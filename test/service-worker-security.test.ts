@@ -78,7 +78,7 @@ test('service worker upgrades safe shell assets without caching private routes',
   });
   assert.ok(activation);
   await activation;
-  assert.deepEqual(deletedCaches, ['asb-shell-v2', 'asb-shell-v3', 'asb-shell-v4']);
+  assert.deepEqual(deletedCaches, ['asb-shell-v2', 'asb-shell-v3', 'asb-shell-v4', 'asb-shell-v5']);
 
   let intercepted = false;
   fetchListener({
@@ -105,4 +105,30 @@ test('service worker upgrades safe shell assets without caching private routes',
   });
   assert.equal(intercepted, false, 'query-bearing static requests must bypass Cache Storage');
   assert.equal(cacheWrites, 0);
+});
+
+test('static assets prefer fresh network data and use cache only while offline', async () => {
+  const source = await readFile(path.join(process.cwd(), 'public', 'service-worker.js'), 'utf8');
+  const listeners = new Map<string, (event: unknown) => void>();
+  const cached = { body: 'old stylesheet' };
+  const fresh = { body: 'new stylesheet', ok: true, clone: () => ({ body: 'new stylesheet' }) };
+  let offline = false;
+  let writes = 0;
+  const context = {
+    URL,
+    caches: { open: async () => ({ match: async () => cached, put: async () => { writes += 1; } }) },
+    fetch: async () => { if (offline) throw new Error('offline'); return fresh; },
+    self: { addEventListener: (name: string, listener: (event: unknown) => void) => listeners.set(name, listener), location: { origin: 'https://asb.example.test' } },
+  };
+  vm.runInNewContext(source, context);
+  const readAsset = async () => {
+    let response: Promise<unknown> | undefined;
+    listeners.get('fetch')!({ request: { method: 'GET', mode: 'cors', url: 'https://asb.example.test/app.css' }, respondWith: (value: Promise<unknown>) => { response = value; } });
+    return response;
+  };
+  assert.equal(await readAsset(), fresh);
+  assert.equal(writes, 1);
+  offline = true;
+  assert.equal(await readAsset(), cached);
+  assert.equal(writes, 1);
 });

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#2563eb" />
+    <meta name="theme-color" content="#161e2e" />
     <title>Agent Session Bridge</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
@@ -19,7 +19,7 @@
           <div class="brandMark">ASB</div>
           <div class="brandCopy">
             <div class="brandTitle">Agent Session Bridge</div>
-            <div class="brandMeta">Local session manager</div>
+            <div class="brandMeta">LOCAL AGENT WORKSPACE</div>
           </div>
         </div>
 
@@ -62,19 +62,22 @@
       <main class="workbench">
         <aside id="filterSheet" class="filterSheet workbenchSidebar navRail side sideShell" aria-label="会话筛选面板">
           <nav class="leftRail asbLeftRail" aria-label="功能分区">
-            <button class="railBtn active" type="button" title="总控">总</button>
-            <button class="railBtn" type="button" title="会话">会</button>
-            <button class="railBtn" type="button" title="机器">机</button>
-            <button class="railBtn" type="button" title="审批">审</button>
+            <button class="railBtn active" data-view="overview" type="button" title="指挥中心">指挥中心</button>
+            <button class="railBtn" data-view="machines" type="button" title="机器与 AI">机器与 AI</button>
+            <button class="railBtn" data-view="tasks" type="button" title="任务管理">任务管理</button>
+            <button class="railBtn" data-view="sessions" type="button" title="执行实例">执行实例</button>
+            <button class="railBtn" data-view="conversation" type="button" title="会话工作区">会话工作区</button>
+            <button class="railBtn" data-view="services" type="button" title="机器与服务">机器与服务</button>
+            <button class="railBtn" data-view="approvals" type="button" title="待你处理">待你处理</button>
             <div class="railDivider" aria-hidden="true"></div>
-            <button class="railBtn railToggle" type="button" title="导航">ASB</button>
+            <button class="railBtn railToggle" data-view="workspace" type="button" title="文件与终端">文件与终端</button>
           </nav>
 
           <div class="sideContent asbSideContent">
             <div class="sidebarIntro">
             <p class="eyebrow">Session Navigator</p>
-            <h2>会话导航</h2>
-            <p class="sidebarCopy">选择会话、机器或服务，并查看当前目标的审批、终端和工作区状态。</p>
+            <h2>我的会话</h2>
+            <p class="sidebarCopy">每个工作区，一个专注的 Agent。</p>
           </div>
 
           <div class="sidebarStats">
@@ -115,10 +118,8 @@
             <div id="sessionsList" class="sessionsList empty">暂无会话</div>
           </div>
 
-          <div class="sheetSection">
-            <div class="sheetSubHeader">
-              <span>新建会话</span>
-            </div>
+          <details class="sheetSection" id="createSessionDetails">
+            <summary>新建会话</summary>
             <form id="createSessionForm" class="stack">
               <label class="field">
                 <span>目标机器</span>
@@ -149,12 +150,10 @@
               </label>
               <button class="primaryBtn fullWidth" type="submit">创建</button>
             </form>
-          </div>
+          </details>
 
-          <div class="sheetSection">
-            <div class="sheetSubHeader">
-              <span>访问配置</span>
-            </div>
+          <details class="sheetSection" id="accessDetails">
+            <summary>访问配置</summary>
             <div class="stack">
               <label class="field">
                 <span>API Token（仅当前页面）</span>
@@ -174,11 +173,95 @@
               <button id="notificationButton" class="ghostBtn compactBtn" type="button">启用浏览器通知</button>
               <div id="pwaStatus" class="formHint">PWA 正在初始化</div>
             </div>
-          </div>
+          </details>
           </div>
         </aside>
 
         <section class="workspaceColumn mainStage main">
+          <section id="commandCenter" class="commandCenter">
+            <div class="overviewHeading">
+              <div><p class="eyebrow">AGENT SESSION BRIDGE / CONTROL</p><h1 id="centerTitle">指挥中心<span class="headingDot">.</span></h1><p id="centerSubtitle" class="chatSubtle">看清执行位置、任务目标与下一步责任。</p></div>
+              <button id="createTaskButton" class="primaryBtn" type="button">+ 新建任务</button>
+            </div>
+            <div id="centerConnection" class="connectionNote" role="status">正在读取管理中心数据…</div>
+            <section id="officeTown" class="officeTown" aria-labelledby="officeTownTitle">
+              <div class="townHeader">
+                <div>
+                  <p class="eyebrow">PIXEL OFFICE TOWN</p>
+                  <h2 id="officeTownTitle">AI 办公园区</h2>
+                  <p>每台机器是一间办公室，每项任务是一位员工。画面使用真实登记数据，不插入示例任务。</p>
+                </div>
+                <dl class="townLegend" aria-label="员工状态图例">
+                  <div><dt><i class="legendPixel running"></i>敲键盘</dt><dd>执行中</dd></div>
+                  <div><dt><i class="legendPixel attention"></i>举手</dt><dd>需要核实</dd></div>
+                  <div><dt><i class="legendPixel review"></i>检查清单</dt><dd>待你验收</dd></div>
+                  <div><dt><i class="legendPixel queued"></i>工牌闪烁</dt><dd>待下发</dd></div>
+                </dl>
+              </div>
+              <div id="townRooms" class="townRooms" aria-live="polite"></div>
+            </section>
+            <div class="centerMetrics" id="centerMetrics"></div>
+            <div id="centerMachines" class="centerMachines"></div>
+            <section id="centerTaskSection">
+              <div class="workListHeading"><h2 id="centerListTitle">任务与执行</h2><span class="syncLabel">明确目标 · 指定执行者 · 人工验收</span></div>
+              <div class="workToolbar">
+                <div class="workFilters" aria-label="任务状态筛选" role="group">
+                  <button type="button" data-task-filter="all" aria-pressed="true">全部</button>
+                  <button type="button" data-task-filter="active" aria-pressed="false">执行中</button>
+                  <button type="button" data-task-filter="attention" aria-pressed="false">需关注</button>
+                  <button type="button" data-task-filter="queued" aria-pressed="false">待下发</button>
+                  <button type="button" data-task-filter="done" aria-pressed="false">已结束</button>
+                </div>
+                <input id="taskSearch" type="search" placeholder="搜索任务目标、机器或 AI…" aria-label="搜索任务" />
+              </div>
+              <div class="workTableWrap"><table class="taskTable"><thead><tr><th>任务 / 要做什么</th><th>机器 / AI 实例</th><th>当前情况</th><th>下一步 / 谁负责</th><th>操作</th></tr></thead><tbody id="centerTaskRows"></tbody></table></div>
+              <div id="centerTaskEmpty" class="workEmpty"></div>
+            </section>
+            <section id="centerAttention" class="centerAttention"></section>
+            <section class="supervisionGuide" id="supervisionGuide">
+              <div><p class="eyebrow">SUPERVISION POLICY</p><h2>如何监督工作</h2></div>
+              <ol><li><strong>明确目标</strong><span>任务必须填写目标与验收条件</span></li><li><strong>人工下发</strong><span>选定空闲实例，不抢占已有任务</span></li><li><strong>规则观察</strong><span>查看会话异常与活动记录</span></li><li><strong>证据验收</strong><span>提交结果，由你确认完成</span></li></ol>
+              <p>当前不自动重试、不自动批准命令、不自动部署。无输出不等于卡死；AI 自述完成不等于验收通过。规则依据最近同步记录，自动更新不等于自动执行。</p>
+            </section>
+          </section>
+          <section class="workOverview" id="workOverview" aria-labelledby="workOverviewTitle">
+            <div class="overviewHeading">
+              <div>
+                <p class="eyebrow">WORKSPACE / OVERVIEW</p>
+                <h1 id="workOverviewTitle">执行实例<span class="headingDot">.</span></h1>
+                <p class="chatSubtle">每个实例是一个 CLI 会话，不代表一个独立任务。现有会话均在本机执行。</p>
+              </div>
+              <button id="newWorkButton" type="button" class="primaryBtn">+ 新建会话</button>
+            </div>
+            <div class="workMetrics" aria-label="工作统计">
+              <div><span>全部会话</span><strong id="workTotal">—</strong><small>已接入的工作区会话</small></div>
+              <div><span><i class="statusDot running"></i>正在工作</span><strong id="workRunning">—</strong><small>运行中或正在启动</small></div>
+              <div><span><i class="statusDot attention"></i>需要关注</span><strong id="workAttention">—</strong><small>异常、待确认或待审批</small></div>
+              <div><span>待审批操作</span><strong id="workPending">—</strong><small>由你确认后继续执行</small></div>
+            </div>
+            <div class="workListHeading">
+              <h2>工作列表 <span id="workResultCount" class="countBadge">0</span></h2>
+              <span id="workSyncLabel" class="syncLabel" role="status">正在连接本机服务…</span>
+            </div>
+            <div class="workToolbar">
+              <div class="workFilters" role="group" aria-label="按工作状态筛选">
+                <button type="button" data-work-filter="all" aria-pressed="true">全部</button>
+                <button type="button" data-work-filter="running" aria-pressed="false">工作中</button>
+                <button type="button" data-work-filter="attention" aria-pressed="false">需关注</button>
+                <button type="button" data-work-filter="idle" aria-pressed="false">空闲</button>
+                <button type="button" data-work-filter="stopped" aria-pressed="false">已停止</button>
+              </div>
+              <input id="workSearch" type="search" aria-label="搜索工作" placeholder="搜索会话、目录或最近输出…" />
+            </div>
+            <div class="workTableWrap">
+              <table class="workTable">
+                <thead><tr><th scope="col">会话 / 工作目录</th><th scope="col">状态 / Agent</th><th scope="col">最近工作情况</th><th scope="col">最近活跃</th><th scope="col">操作</th></tr></thead>
+                <tbody id="workTableBody"></tbody>
+              </table>
+            </div>
+            <div id="workEmpty" class="workEmpty"><span class="emptyGlyph" aria-hidden="true">⌘</span><h3>正在读取工作情况</h3><p>连接后，会话状态与最近输出会显示在这里。</p></div>
+            <div class="workFootnote"><span>状态来自会话记录与最近一次巡检，不代表任务完成比例。</span><button id="workInspectButton" class="textBtn" type="button">立即巡检 ↗</button></div>
+          </section>
           <section class="heroCard stageHero">
             <div class="heroPrimary">
               <div class="heroBrandLockup" aria-label="Agent Session Bridge">
@@ -561,6 +644,24 @@
     </div>
 
     <div id="sheetBackdrop" class="sheetBackdrop hidden"></div>
+    <dialog id="taskCreateDialog" class="taskDialog" aria-labelledby="taskCreateTitle">
+      <form id="taskCreateForm">
+        <div class="dialogHeader"><div><p class="eyebrow">NEW TASK</p><h2 id="taskCreateTitle">安排一项工作</h2></div><button type="button" class="ghostBtn" data-close-dialog="taskCreateDialog">关闭</button></div>
+        <p class="connectionNote">创建后先进入待下发列表，不会立即向 AI 发送指令。远程执行尚未接通。</p>
+        <label class="field">任务名称<input name="title" required maxlength="160" placeholder="例如：修复登录接口超时" /></label>
+        <label class="field">要做什么<textarea name="objective" required maxlength="8000" rows="3" placeholder="说明目标、范围和不能做的事情"></textarea></label>
+        <label class="field">怎样算完成<textarea name="acceptance" required maxlength="4000" rows="2" placeholder="例如：相关测试通过，提供 Diff 和验证命令结果"></textarea></label>
+        <label class="field">执行实例（本机）<select id="taskSessionSelect" name="sessionId" required></select></label>
+        <label class="field">多久没有活动记录后提示检查（分钟）<input name="quietMinutes" type="number" min="5" max="1440" value="15" required /></label>
+        <p id="taskCreateError" role="alert" class="errorText"></p>
+        <button class="primaryBtn" type="submit" id="taskCreateSubmit">创建待下发任务</button>
+      </form>
+    </dialog>
+    <dialog id="taskDetailDialog" class="taskDialog taskDetailDialog" aria-labelledby="taskDetailTitle">
+      <div class="dialogHeader"><h2 id="taskDetailTitle">任务详情</h2><button type="button" class="ghostBtn" data-close-dialog="taskDetailDialog">关闭</button></div>
+      <div id="taskDetailBody"></div>
+      <p id="taskDetailError" role="alert" class="errorText"></p>
+    </dialog>
 
     <script src="/app.js" type="module"></script>
   </body>

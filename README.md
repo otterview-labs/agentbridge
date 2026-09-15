@@ -7,6 +7,12 @@ Agent Session Bridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 
 
 ## 功能
 
+- 指挥中心分开展示机器、已检测 AI 工具、执行实例、任务与待处理事项
+- 本机任务支持明确目标、人工下发、规则观察、提交证据与人工验收
+- 任务和时间线保存在 SQLite；远程 Runner 尚未实现，不会将远程登记显示为可执行
+
+任务流程、监督边界及 API 见 [`docs/command-center.md`](docs/command-center.md)。
+
 - 按工作区创建、切换、重命名和停止会话
 - 使用 `tmux` 保持会话持续运行
 - 支持 Codex、Claude Code 和 Gemini CLI

@@ -10,6 +10,7 @@ async function main(): Promise<void> {
   await app.machineService.registerLocalMachine();
   app.notificationService.start();
   const httpServer = new HttpApiServer({
+    taskService: app.taskService,
     approvalService: app.approvalService,
     butlerService: app.butlerService,
     commandRouter: app.commandRouter,

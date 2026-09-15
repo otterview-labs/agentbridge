@@ -26,9 +26,11 @@ import { SessionEventBus } from '../services/session-event-bus.js';
 import { SessionService } from '../services/session-service.js';
 import { SupervisorService } from '../services/supervisor-service.js';
 import { TerminalService } from '../services/terminal-service.js';
+import { TaskService } from '../services/task-service.js';
 import { WorkspaceService } from '../services/workspace-service.js';
 
 type HttpApiServerOptions = {
+  taskService: TaskService;
   approvalService: ApprovalService;
   butlerService: ButlerService;
   commandRouter: CommandRouter;
@@ -59,6 +61,8 @@ const STATIC_ASSETS = new Map<string, string>([
   ['/app.css', 'app.css'],
   ['/app.js', 'app.js'],
   ['/api-token-state.js', 'api-token-state.js'],
+  ['/work-status.js', 'work-status.js'],
+  ['/command-center.js', 'command-center.js'],
   ['/manifest.webmanifest', 'manifest.webmanifest'],
   ['/service-worker.js', 'service-worker.js'],
   ['/icon.svg', 'icon.svg'],
@@ -144,6 +148,27 @@ export class HttpApiServer {
       }
 
       this.authorize(request);
+
+      if (method === 'GET' && pathname === '/tasks') {
+        this.sendJson(response, 200, { tasks: await this.options.taskService.list() });
+        return;
+      }
+      if (method === 'POST' && pathname === '/tasks') {
+        const body = await this.readJsonBody(request);
+        const task = await this.options.taskService.create(body, resolveActorId(body, request));
+        this.sendJson(response, 201, { task });
+        return;
+      }
+      const taskAction = /^\/tasks\/([1-9]\d*)\/(dispatch|review|complete|cancel)$/u.exec(pathname);
+      if (method === 'POST' && taskAction) {
+        const body = await this.readJsonBody(request);
+        const task = await this.options.taskService.action(
+          Number(taskAction[1]), taskAction[2]!, resolveActorId(body, request),
+          getOptionalString(body.evidence) ?? '',
+        );
+        this.sendJson(response, 200, { task });
+        return;
+      }
 
       if (method === 'GET' && pathname === '/events') {
         this.handleEvents(request, response, url);

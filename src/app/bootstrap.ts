@@ -17,6 +17,7 @@ import { SessionService } from '../services/session-service.js';
 import { SessionEventBus } from '../services/session-event-bus.js';
 import { SupervisorService } from '../services/supervisor-service.js';
 import { TerminalService } from '../services/terminal-service.js';
+import { TaskService } from '../services/task-service.js';
 import { TmuxCliAgentAdapter } from '../services/tmux-cli-agent-adapter.js';
 import { TmuxCodexAgentAdapter } from '../services/tmux-codex-agent-adapter.js';
 import { WorkspaceService } from '../services/workspace-service.js';
@@ -153,6 +154,7 @@ export function createApplication() {
     config,
     logger: logger.child({ component: 'feishu-token' }),
   });
+  const taskService = new TaskService({ database, sessions: sessionService, machines: machineService });
   const feishuApiClient = new FeishuApiClient({
     logger: logger.child({ component: 'feishu-api' }),
     replyInThread: config.feishuReplyInThread,
@@ -189,6 +191,7 @@ export function createApplication() {
   });
 
   return {
+    taskService,
     agentAdapters,
     agentRuntimeService,
     approvalRepository,

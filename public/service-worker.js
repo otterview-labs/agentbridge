@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'asb-shell-v5';
+const SHELL_CACHE = 'asb-shell-v10';
 
 const SHELL_NAVIGATIONS = new Set(['/', '/ui', '/index.html']);
 
@@ -8,6 +8,8 @@ const SHELL_ASSETS = [
   '/app.css',
   '/app.js',
   '/api-token-state.js',
+  '/work-status.js',
+  '/command-center.js',
   '/manifest.webmanifest',
   '/icon.svg',
 ];
@@ -68,7 +70,7 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
-    event.respondWith(cacheFirst(request, SHELL_CACHE));
+    event.respondWith(networkFirstAsset(request, SHELL_CACHE));
     return;
   }
 
@@ -77,19 +79,20 @@ self.addEventListener('fetch', (event) => {
   // never retained in Cache Storage or replayed across token changes.
 });
 
-async function cacheFirst(request, cacheName) {
+async function networkFirstAsset(request, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-
-  if (cached) {
-    return cached;
+  try {
+    // Keep styles and modules fresh alongside network-first HTML after an update.
+    const response = await fetch(request);
+    if (response.ok) {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
   }
-
-  const response = await fetch(request);
-  if (response.ok) {
-    await cache.put(request, response.clone());
-  }
-  return response;
 }
 
 async function networkFirstNavigation(request, fallbackPath) {
