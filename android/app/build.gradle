@@ -1,0 +1,37 @@
+plugins {
+  id 'com.android.application'
+}
+android {
+  namespace 'com.otterview.agentsessionbridge'
+  compileSdk 35
+  buildToolsVersion '35.0.0'
+  defaultConfig {
+    applicationId 'com.otterview.agentsessionbridge'
+    minSdkVersion 24
+    targetSdkVersion 35
+    versionCode 37
+    versionName '0.5.21'
+  }
+  buildTypes {
+    debug {
+      applicationIdSuffix '.debug'
+    }
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation 'com.github.mwiede:jsch:0.2.26'
+}
+
+// Keep the responsive studio identical on Web and Android.
+tasks.register('syncStudioAssets', Copy) {
+  from(rootProject.file('../public')) {
+    include 'studio.html', 'studio.css', 'studio.js'
+  }
+  into('src/main/assets')
+}
+tasks.named('preBuild').configure { dependsOn('syncStudioAssets') }
