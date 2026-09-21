@@ -1,5 +1,9 @@
 # agentBridge
 
+<p align="center">
+  <img src="docs/screenshots/icon.png" width="96" alt="agentBridge 吉祥物图标">
+</p>
+
 agentBridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
 
 > [!WARNING]
@@ -36,6 +40,25 @@ Android WebView 壳与 APK 构建见 [`docs/android-app.md`](docs/android-app.md
 | 文件浏览、Git 预览、受控终端 | 实验性，高权限功能 |
 | 外部服务器管理 | 可选集成，需要单独安装兼容项目 |
 | 在远程机器上创建会话 | 尚未实现 |
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/studio-web.png" width="680" alt="小镇工作室（桌面浏览器）">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/studio-mobile.png" width="196" alt="小镇工作室（手机浏览器）">
+  <img src="docs/screenshots/android-local.png" width="196" alt="Android 应用：本机记录">
+  <img src="docs/screenshots/android-report.png" width="196" alt="Android 应用：管家日报">
+</p>
+
+<p align="center">
+  <sub>左起：手机浏览器、Android 应用的本机记录与管家日报。</sub>
+</p>
+
+以上为 `/studio`（小镇工作室）：管家对话、像素办公室、日报与显式记忆。桌面与手机浏览器共用同一套页面，Android 应用复用相同资源，也可脱离 Hub 以本机模式独立运行。
+控制台式管理界面（会话、审批、机器与终端）在 `/`。
 
 ## 环境要求
 
