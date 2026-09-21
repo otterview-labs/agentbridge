@@ -6,7 +6,7 @@ export class LoggerFactory {
   static create(level: LogLevel): Logger {
     return pino({
       level,
-      name: 'agent-session-bridge',
+      name: 'agentbridge',
     });
   }
 }

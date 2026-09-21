@@ -79,7 +79,7 @@ export class FeishuChannel {
         await this.options.apiClient.replyText(
           event.messageId,
           [
-            '我已经连上 Agent Session Bridge 了。',
+            '我已经连上 AgentBridge 了。',
             '直接发命令即可，例如：',
             '/list',
             '/new demo /path/to/your/projects/demo',

@@ -276,7 +276,7 @@ export class HttpApiServer {
       if (method === 'GET' && pathname === '/health') {
         this.sendJson(response, 200, {
           ok: true,
-          service: 'agent-session-bridge',
+          service: 'agentbridge',
           supervisor: this.options.supervisorService.getState(),
         });
         return;

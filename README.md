@@ -1,6 +1,6 @@
-# Agent Session Bridge
+# AgentBridge
 
-Agent Session Bridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
+AgentBridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
 
 > [!WARNING]
 > 本项目可以读取工作区文件、向会话发送输入，并执行经过审批的本机命令。默认只监听 `127.0.0.1`。远程使用时必须配置 API Token、允许的 Host 和工作区目录，并通过受信任的 HTTPS 反向代理或 VPN 接入。
@@ -53,8 +53,8 @@ brew install tmux
 ## 快速开始
 
 ```bash
-git clone https://github.com/otterview-labs/agent-session-bridge.git
-cd agent-session-bridge
+git clone https://github.com/otterview-labs/agentbridge.git
+cd agentbridge
 npm ci
 cp .env.example .env
 npm run build
@@ -220,7 +220,7 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 ## 项目结构
 
 ```text
-agent-session-bridge/
+agentbridge/
 ├── public/        # Web UI 与 PWA 文件
 ├── src/           # 应用源码
 ├── test/          # 自动测试
