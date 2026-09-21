@@ -44,6 +44,7 @@ function fixture() {
     codexHome: path.join(os.tmpdir(), 'asb-empty-codex-home'),
     commandRunner,
     database,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => (machine ? [machine] : []),
@@ -117,6 +118,7 @@ function remoteProcessFixture() {
       return { exitCode: 0, stderr: '', stdout: '' };
     },
     database,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => (machine ? [machine] : []),
@@ -177,6 +179,7 @@ function localFixture() {
       return { exitCode: 0, stderr: '', stdout: '' };
     },
     database,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => [machine],
@@ -239,6 +242,7 @@ function localProcessFixture() {
     claudeHome,
     codexHome: path.join(os.tmpdir(), 'asb-empty-codex-home'),
     database,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => [machine],
@@ -311,6 +315,7 @@ function localCodexDesktopFixture() {
       return { exitCode: 0, stderr: '', stdout: '' };
     },
     database,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => [machine],
@@ -466,4 +471,62 @@ test('SSH machine input rejects ambiguous hosts and unsupported prompts', async 
   const [task] = await f.service.discoverTasks(machine.id);
   assert.ok(task);
   await assert.rejects(f.service.sendPrompt(task.id, ' ', 'tester'), /不能为空/u);
+});
+
+function hostKeyPolicyFixture(policy: 'accept-new' | 'strict') {
+  const database = new DatabaseClient(':memory:', pino({ level: 'silent' }));
+  const invocations: string[][] = [];
+  let machine: MachineRecord | null = null;
+  const service = new SshMachineService({
+    codexHome: path.join(os.tmpdir(), 'asb-empty-codex-home'),
+    commandRunner: async (command: string, args: string[]) => {
+      invocations.push([command, ...args]);
+      const script = String(args.at(-1));
+      if (script.includes('ASB_OS=')) {
+        return { exitCode: 0, stderr: '', stdout: 'ASB_OS=Linux\nASB_TOOL_claude=1\nASB_TOOL_codex=0\nASB_TOOL_gemini=0\ntmux 3.4' };
+      }
+      return { exitCode: 0, stderr: '', stdout: '' };
+    },
+    database,
+    hostKeyPolicy: policy,
+    logger: pino({ level: 'silent' }),
+    machines: {
+      listMachines: async () => (machine ? [machine] : []),
+      registerMachine: async (input) => {
+        const now = new Date().toISOString();
+        machine = {
+          capabilities: input.capabilities ?? {},
+          createdAt: now,
+          host: input.host ?? null,
+          id: 2,
+          labels: input.labels ?? [],
+          lastSeenAt: now,
+          name: input.name,
+          namespace: input.namespace ?? 'default',
+          runnerVersion: input.runnerVersion ?? null,
+          status: input.status ?? 'online',
+          updatedAt: now,
+        };
+        return machine;
+      },
+    },
+  });
+  return { invocations, service };
+}
+
+test('SSH host key policy is applied to every remote invocation', async () => {
+  const relaxed = hostKeyPolicyFixture('accept-new');
+  await relaxed.service.addMachine({ host: 'linux', name: 'linux', user: 'demo' });
+  const relaxedSsh = relaxed.invocations.find((args) => args[0] === 'ssh');
+  assert.ok(relaxedSsh, 'expected the probe to run over ssh');
+  assert.equal(relaxedSsh.includes('StrictHostKeyChecking=accept-new'), true);
+  assert.equal(relaxedSsh.includes('StrictHostKeyChecking=yes'), false);
+
+  const strict = hostKeyPolicyFixture('strict');
+  await strict.service.addMachine({ host: 'linux', name: 'linux', user: 'demo' });
+  const strictSsh = strict.invocations.find((args) => args[0] === 'ssh');
+  assert.ok(strictSsh, 'expected the probe to run over ssh');
+  assert.equal(strictSsh.includes('StrictHostKeyChecking=yes'), true);
+  // A strict machine must never silently trust a host it has not seen before.
+  assert.equal(strictSsh.includes('StrictHostKeyChecking=accept-new'), false);
 });

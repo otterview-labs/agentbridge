@@ -82,3 +82,15 @@ export function resolveCommandExecutable(commandLine: string): string {
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
+
+export type SshHostKeyPolicy = 'accept-new' | 'strict';
+
+/**
+ * Maps the operator-facing policy onto the value ssh actually expects.
+ * `accept-new` trusts an unknown host on first contact but still refuses a
+ * later key change; `strict` refuses unknown hosts and needs a prepared
+ * known_hosts entry.
+ */
+export function hostKeyCheckingOption(policy: SshHostKeyPolicy): string {
+  return policy === 'strict' ? 'yes' : 'accept-new';
+}

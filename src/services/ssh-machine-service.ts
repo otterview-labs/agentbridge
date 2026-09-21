@@ -10,7 +10,7 @@ import { CommandExecutionError, DependencyError, NotFoundError, ValidationError 
 import type { SshMachineConnection, SshMachineProbe, SshTaskRecord } from '../domain/ssh-machine.js';
 import { runCommand, type CommandResult } from '../infra/process/command-runner.js';
 import type { DatabaseClient } from '../infra/storage/database.js';
-import { shellQuote } from '../utils/runtime-command.js';
+import { hostKeyCheckingOption, shellQuote, type SshHostKeyPolicy } from '../utils/runtime-command.js';
 import type { MachineService } from './machine-service.js';
 
 type SshMachineServiceOptions = {
@@ -19,6 +19,7 @@ type SshMachineServiceOptions = {
   codexHome?: string;
   codexBin?: string;
   database: DatabaseClient;
+  hostKeyPolicy: SshHostKeyPolicy;
   logger: Logger;
   machines: Pick<MachineService, 'listMachines' | 'registerMachine'>;
   commandRunner?: typeof runCommand;
@@ -755,7 +756,7 @@ export class SshMachineService {
     const args = [
       '-o', 'BatchMode=yes',
       '-o', 'ConnectTimeout=8',
-      '-o', 'StrictHostKeyChecking=accept-new',
+      '-o', `StrictHostKeyChecking=${hostKeyCheckingOption(this.options.hostKeyPolicy)}`,
       '-p', String(connection.port),
     ];
     if (connection.privateKeyPath) args.push('-i', connection.privateKeyPath);

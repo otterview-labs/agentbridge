@@ -20,11 +20,36 @@ Linux cloud server with root or passwordless sudo.
    visitor. Disabling the relay restores the direct SSH connection.
 
 FRP binaries are downloaded from the configured release base and verified with
-the release SHA-256 checksum file. An existing third-party `frps` can be adopted
+the release SHA-256 checksum file. The base comes from `ASB_FRP_DOWNLOAD_BASE`,
+but each cloud entry can override it from the **下载源** field when the default
+GitHub endpoint is unreachable; the override is stored per server and used for
+that server's `frps` and `frpc` downloads. An existing third-party `frps` can be adopted
 read-only; Agent Bridge stores its bind port and token but does not rewrite its
 configuration or restart it. When no reusable service exists, cloud `frps` runs
 as a systemd service. LAN clients use launchd on macOS and systemd on Linux
 (user systemd when sudo is unavailable).
+
+## Host key trust
+
+Every remote SSH call (discovery, task control, and FRP deployment) uses
+`ASB_SSH_HOST_KEY_POLICY`:
+
+- `accept-new` (default) trusts an unknown host on first contact but still
+  refuses the connection if its key changes later.
+- `strict` refuses any host missing from `known_hosts`. Because a machine must
+  already be configured for passwordless SSH before it can be added, `strict`
+  normally works out of the box on hosts that were reached once manually. For a
+  host with no `known_hosts` entry, pre-seed it first:
+
+  ```sh
+  ssh-keyscan -p PORT HOST >> ~/.ssh/known_hosts
+  ```
+
+  `known_hosts` matches on address *and* port, so the entry must cover the pair
+  the Hub actually connects to (non-default ports are stored in bracket form,
+  e.g. `[127.0.0.1]:22000`). Once a relay is enabled, a machine is reached at
+  `127.0.0.1` with the relay's visitor port rather than its LAN address, so a
+  `strict` setup needs an entry for that target as well.
 
 Open the selected FRP bind port in the cloud provider firewall/security group.
 Do not open LAN machines' SSH ports to the internet. If the Hub page is opened

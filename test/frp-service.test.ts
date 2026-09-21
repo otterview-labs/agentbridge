@@ -41,6 +41,7 @@ function fixture() {
     database,
     downloadBase: 'https://frp.example/download',
     frpcBin: null,
+    hostKeyPolicy: 'accept-new',
     logger: pino({ level: 'silent' }),
     machines: {
       listMachines: async () => [...machines.values()],
@@ -122,4 +123,21 @@ test('FRP server input rejects unsafe addresses and port ranges', async () => {
   const f = fixture();
   await assert.rejects(f.service.configureServer({ machineId: f.cloud.id, publicAddress: 'bad host' }), /公网地址/u);
   await assert.rejects(f.service.configureServer({ machineId: f.cloud.id, bindPort: 22 }), /端口/u);
+});
+
+test('FRP install script downloads from the base configured for that server', async () => {
+  const f = fixture();
+  const server = await f.service.configureServer({
+    downloadBase: 'https://mirror.example/frp',
+    machineId: f.cloud.id,
+    publicAddress: 'frp.example.com',
+  });
+  assert.equal(server.downloadBase, 'https://mirror.example/frp');
+
+  const relay = await f.service.configureRelay({ machineId: f.lan.id, serverId: server.id });
+  const script = f.service.installScript(relay.id);
+  assert.match(script, /https:\/\/mirror\.example\/frp\/v0\.61\.1\/frp_0\.61\.1___ASB_OS_ARCH__\.tar\.gz/u);
+  assert.match(script, /https:\/\/mirror\.example\/frp\/v0\.61\.1\/frp_sha256_checksums\.txt/u);
+  // The instance-wide default must not leak back in once a server sets its own mirror.
+  assert.doesNotMatch(script, /frp\.example\/download/u);
 });

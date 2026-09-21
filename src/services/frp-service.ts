@@ -11,13 +11,14 @@ import type { MachineRecord } from '../domain/machine.js';
 import type { MachineService } from './machine-service.js';
 import { runCommand } from '../infra/process/command-runner.js';
 import type { DatabaseClient } from '../infra/storage/database.js';
-import { shellQuote } from '../utils/runtime-command.js';
+import { hostKeyCheckingOption, shellQuote, type SshHostKeyPolicy } from '../utils/runtime-command.js';
 import type { SshMachineService } from './ssh-machine-service.js';
 
 type FrpServiceOptions = {
   database: DatabaseClient;
   downloadBase: string;
   frpcBin: string | null;
+  hostKeyPolicy: SshHostKeyPolicy;
   logger: Logger;
   machines: Pick<MachineService, 'listMachines' | 'registerMachine'>;
   ssh: Pick<SshMachineService, 'connectionForMachine'>;
@@ -149,8 +150,8 @@ export class FrpService {
       '',
     ].join('\n');
     const script = buildFrpsInstaller({
-      archive: this.archiveUrl(server.version, 'linux'),
-      checksumUrl: this.checksumUrl(server.version),
+      archive: this.archiveUrl(server.version, 'linux', server.downloadBase),
+      checksumUrl: this.checksumUrl(server.version, server.downloadBase),
       config,
       bindPort: server.bindPort,
     });
@@ -206,8 +207,8 @@ export class FrpService {
     await this.setRelayStatus(id, 'deploying');
     const config = this.relayConfig(server, relay);
     const script = buildFrpcInstaller({
-      archive: this.archiveUrl(server.version, 'remote'),
-      checksumUrl: this.checksumUrl(server.version),
+      archive: this.archiveUrl(server.version, 'remote', server.downloadBase),
+      checksumUrl: this.checksumUrl(server.version, server.downloadBase),
       config,
       name: relay.proxyName,
     });
@@ -264,8 +265,8 @@ export class FrpService {
     const server = this.requireServer(relay.serverId);
     const config = this.relayConfig(server, relay);
     return buildFrpcInstaller({
-      archive: this.archiveUrl(server.version, 'remote'),
-      checksumUrl: this.checksumUrl(server.version),
+      archive: this.archiveUrl(server.version, 'remote', server.downloadBase),
+      checksumUrl: this.checksumUrl(server.version, server.downloadBase),
       config,
       name: relay.proxyName,
     });
@@ -382,8 +383,8 @@ export class FrpService {
     if (fs.existsSync(cached)) return cached;
     const platform = process.platform === 'darwin' ? 'darwin' : 'linux';
     const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
-    const archive = this.archiveUrl(this.options.version, `${platform}_${arch}`);
-    const checksum = this.checksumUrl(this.options.version);
+    const archive = this.archiveUrl(this.options.version, `${platform}_${arch}`, this.options.downloadBase);
+    const checksum = this.checksumUrl(this.options.version, this.options.downloadBase);
     await this.downloadVerifiedArchive(archive, checksum, `frp_${this.options.version}_${platform}_${arch}.tar.gz`);
     fs.mkdirSync(path.dirname(cached), { recursive: true });
     await runCommand('tar', [
@@ -414,13 +415,13 @@ export class FrpService {
     fs.writeFileSync(archivePath, archive, { mode: 0o600 });
   }
 
-  private archiveUrl(version: string, target: string): string {
+  private archiveUrl(version: string, target: string, downloadBase: string): string {
     const suffix = target === 'remote' ? '__ASB_OS_ARCH__' : target;
-    return `${this.options.downloadBase}/v${version}/frp_${version}_${suffix}.tar.gz`;
+    return `${downloadBase}/v${version}/frp_${version}_${suffix}.tar.gz`;
   }
 
-  private checksumUrl(version: string): string {
-    return `${this.options.downloadBase}/v${version}/frp_sha256_checksums.txt`;
+  private checksumUrl(version: string, downloadBase: string): string {
+    return `${downloadBase}/v${version}/frp_sha256_checksums.txt`;
   }
 
   private async useRelayConnection(machine: MachineRecord, relay: FrpRelayRecord): Promise<void> {
@@ -477,7 +478,12 @@ export class FrpService {
   }
 
   private async runSsh(connection: { host: string; port: number; user: string | null; privateKeyPath: string | null }, script: string) {
-    const args = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-p', String(connection.port)];
+    const args = [
+      '-o', 'BatchMode=yes',
+      '-o', 'ConnectTimeout=10',
+      '-o', `StrictHostKeyChecking=${hostKeyCheckingOption(this.options.hostKeyPolicy)}`,
+      '-p', String(connection.port),
+    ];
     if (connection.privateKeyPath) args.push('-i', connection.privateKeyPath);
     args.push(connection.user ? `${connection.user}@${connection.host}` : connection.host, '/bin/sh', '-lc', script);
     return runCommand('ssh', args, { maxOutputCharacters: 40_000 });

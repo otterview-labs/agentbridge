@@ -71,6 +71,7 @@ const envSchema = z.object({
   ASB_PYTHON_BIN: z.string().default('python3'),
   ASB_SERVER_MANAGER_CONFIG: z.string().default('servers_config.json'),
   ASB_SERVER_MANAGER_PATH: z.string().default('../server-manager'),
+  ASB_SSH_HOST_KEY_POLICY: z.enum(['accept-new', 'strict']).default('accept-new'),
   ASB_SUPERVISOR_ENABLED: booleanFromEnv(true).default(true),
   ASB_SUPERVISOR_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
   ASB_SUPERVISOR_TAIL_LINES: z.coerce.number().int().positive().default(80),
@@ -109,6 +110,7 @@ export type AppConfig = {
   pythonBin: string;
   serverManagerConfigPath: string;
   serverManagerPath: string;
+  sshHostKeyPolicy: 'accept-new' | 'strict';
   supervisorEnabled: boolean;
   supervisorIntervalMs: number;
   supervisorTailLines: number;
@@ -204,6 +206,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     pythonBin: parsed.ASB_PYTHON_BIN,
     serverManagerConfigPath,
     serverManagerPath,
+    sshHostKeyPolicy: parsed.ASB_SSH_HOST_KEY_POLICY,
     supervisorEnabled: parsed.ASB_SUPERVISOR_ENABLED,
     supervisorIntervalMs: parsed.ASB_SUPERVISOR_INTERVAL_MS,
     supervisorTailLines: parsed.ASB_SUPERVISOR_TAIL_LINES,

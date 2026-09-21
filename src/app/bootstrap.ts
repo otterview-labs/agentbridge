@@ -160,6 +160,7 @@ export function createApplication() {
     claudeBin: resolveCommandExecutable(config.claudeBin),
     codexBin: resolveCommandExecutable(config.codexBin),
     database,
+    hostKeyPolicy: config.sshHostKeyPolicy,
     logger: logger.child({ component: 'ssh-machine-service' }),
     machines: machineService,
   });
@@ -167,6 +168,7 @@ export function createApplication() {
     database,
     downloadBase: config.frpDownloadBase,
     frpcBin: config.frpcBin,
+    hostKeyPolicy: config.sshHostKeyPolicy,
     logger: logger.child({ component: 'frp-service' }),
     machines: machineService,
     ssh: sshMachineService,
