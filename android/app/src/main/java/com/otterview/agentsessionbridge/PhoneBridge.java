@@ -978,7 +978,7 @@ final class PhoneBridge {
   public String scanNetwork(String prefixOrAddress) {
     String prefix = normalizePrefix(prefixOrAddress);
     if (prefix == null) prefix = networkHint();
-    if (prefix == null) return failure(new IllegalArgumentException("无法识别手机所在网段，请输入类似 192.168.31"));
+    if (prefix == null) return failure(new IllegalArgumentException("无法识别手机所在网段，请输入类似 192.168.1"));
 
     ExecutorService executor = Executors.newFixedThreadPool(64);
     List<Future<String>> futures = new ArrayList<>();

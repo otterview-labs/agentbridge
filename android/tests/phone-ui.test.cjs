@@ -31,11 +31,11 @@ async function openPhone(t, options = {}) {
   await page.addInitScript(options => {
     const checkedAt = '2026-09-20T03:00:00Z';
     const data = {
-      networkHint: '192.168.31',
+      networkHint: '192.168.1',
       machines: [
-        { id: 1, name: 'Mac Pro · 开发办公室', username: 'demo', host: '192.168.31.8',
+        { id: 1, name: 'Mac Pro · 开发办公室', username: 'demo', host: '192.168.1.8',
           port: 22, lastStatus: 'online', lastCheckedAt: checkedAt, tools: ['codex', 'claude-code'] },
-        { id: 2, name: 'Linux · 测试办公室', username: 'demo', host: '192.168.31.9',
+        { id: 2, name: 'Linux · 测试办公室', username: 'demo', host: '192.168.1.9',
           port: 22, lastStatus: 'offline', lastCheckedAt: checkedAt, tools: ['codex'] }
       ],
       tasks: [

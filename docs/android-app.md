@@ -78,7 +78,7 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 1. Open **发现机器** or **添加 SSH**.
 2. Let the app scan the current Wi-Fi subnet, or enter a prefix such as
-   `192.168.31`.
+   `192.168.1`.
 3. Pick a host with port 22 open.
 4. Enter the SSH username and password/private key.
 5. Save the office, then tap **找任务**.
