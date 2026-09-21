@@ -302,12 +302,28 @@ export class FrpService {
     throw new DependencyError('可用 visitor 端口已用完（22000–22999）。');
   }
 
+  private visitorConfigPath(): string {
+    return path.join(this.options.stateDir, 'visitor-frpc.toml');
+  }
+
+  /**
+   * The visitor config carries the server token and the relay secret key. Once
+   * nothing is left to run, the copy on disk is removed rather than left behind
+   * as a stale credential file that outlives the tunnel it belongs to.
+   */
+  private removeVisitorConfig(): void {
+    fs.rmSync(this.visitorConfigPath(), { force: true });
+  }
+
   private async restartVisitor(): Promise<void> {
     const generation = ++this.visitorGeneration;
     this.visitorProcess?.kill('SIGTERM');
     this.visitorProcess = null;
     const relays = this.listRelays().filter((relay) => relay.enabled);
-    if (!relays.length) return;
+    if (!relays.length) {
+      this.removeVisitorConfig();
+      return;
+    }
     const servers = new Map(this.listServers().map((server) => [server.id, server]));
     const groups = new Map<number, typeof relays>();
     for (const relay of relays) {
@@ -336,10 +352,13 @@ export class FrpService {
         ]),
       ].join('\n'));
     }
-    if (!configs.length) return;
+    if (!configs.length) {
+      this.removeVisitorConfig();
+      return;
+    }
     if (groups.size > 1) throw new DependencyError('当前版本只支持一个在线 FRP 公网入口。');
     const binary = await this.ensureLocalFrpc();
-    const configPath = path.join(this.options.stateDir, 'visitor-frpc.toml');
+    const configPath = this.visitorConfigPath();
     fs.writeFileSync(configPath, configs.join('\n'), { mode: 0o600 });
     const log = fs.openSync(path.join(this.options.stateDir, 'visitor-frpc.log'), 'a');
     const child = spawn(binary, ['-c', configPath], { stdio: ['ignore', log, log] });
@@ -358,7 +377,15 @@ export class FrpService {
       );
     });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    if (child.exitCode !== null) throw new DependencyError('本地 FRP visitor 启动失败，请查看 data/frp/visitor-frpc.log。');
+    if (child.exitCode !== null) {
+      // The exit handler races this probe: it is registered earlier but fires on
+      // the event loop, so on a busy tick it can land after this check and
+      // overwrite the diagnosis below. Retiring it keeps a visitor that dies at
+      // startup reporting consistently instead of depending on timing.
+      this.visitorGeneration += 1;
+      this.visitorProcess = null;
+      throw new DependencyError('本地 FRP visitor 启动失败，请查看 data/frp/visitor-frpc.log。');
+    }
   }
 
   private relayConfig(server: FrpServerRecord, relay: FrpRelayRecord): string {
@@ -386,13 +413,23 @@ export class FrpService {
     const archive = this.archiveUrl(this.options.version, `${platform}_${arch}`, this.options.downloadBase);
     const checksum = this.checksumUrl(this.options.version, this.options.downloadBase);
     await this.downloadVerifiedArchive(archive, checksum, `frp_${this.options.version}_${platform}_${arch}.tar.gz`);
-    fs.mkdirSync(path.dirname(cached), { recursive: true });
-    await runCommand('tar', [
-      '-xzf', path.join(this.options.stateDir, 'download.tar.gz'),
-      '--strip-components=1', '-C', path.dirname(cached),
-      `frp_${this.options.version}_${platform}_${arch}/frpc`,
-    ]);
-    fs.chmodSync(cached, 0o755);
+    // tar strips the `frp_<version>_<os>_<arch>/` prefix, so the binary lands as
+    // plain `frpc` in whichever directory it is extracted into — it has to be
+    // staged and renamed onto the versioned cache path, not extracted onto it.
+    const binDir = path.dirname(cached);
+    fs.mkdirSync(binDir, { recursive: true });
+    const staging = fs.mkdtempSync(path.join(binDir, '.extract-'));
+    try {
+      await runCommand('tar', [
+        '-xzf', path.join(this.options.stateDir, 'download.tar.gz'),
+        '--strip-components=1', '-C', staging,
+        `frp_${this.options.version}_${platform}_${arch}/frpc`,
+      ]);
+      fs.chmodSync(path.join(staging, 'frpc'), 0o755);
+      fs.renameSync(path.join(staging, 'frpc'), cached);
+    } finally {
+      fs.rmSync(staging, { recursive: true, force: true });
+    }
     return cached;
   }
 
