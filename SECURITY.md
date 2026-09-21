@@ -1,6 +1,6 @@
 # Security Policy
 
-AgentBridge is a local-first, single-operator control plane. It can read workspace files, send input to local agent sessions, and execute approved commands. Treat every running instance as a privileged developer tool.
+agentBridge is a local-first, single-operator control plane. It can read workspace files, send input to local agent sessions, and execute approved commands. Treat every running instance as a privileged developer tool.
 
 ## Supported versions
 

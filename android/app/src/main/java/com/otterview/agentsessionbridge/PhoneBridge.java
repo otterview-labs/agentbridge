@@ -576,7 +576,7 @@ final class PhoneBridge {
             && existingPort > 0
             && usedPorts.contains(existingPort);
 
-        // A previously deployed, healthy Agent Bridge frps is reused as-is.
+        // A previously deployed, healthy agentBridge frps is reused as-is.
         if (activeManaged) {
           server.put("token", existingToken)
               .put("bindPort", existingPort)
@@ -591,7 +591,7 @@ final class PhoneBridge {
         // Adopt a healthy third-party frps without changing its service,
         // configuration, process, or existing proxies. Adoption requires a
         // readable auth token so the phone never turns an open relay into an
-        // Agent Bridge entry automatically.
+        // agentBridge entry automatically.
         int externalPort = inspection.optInt("externalBindPort", 0);
         String externalToken = inspection.optString("externalToken", "");
         if (externalToken.isEmpty() && server.optBoolean("tokenProvided")) {
@@ -1472,7 +1472,7 @@ final class PhoneBridge {
         + "printf '%s' " + shellQuote(encoded) + " | base64 -d | $SUDO tee /etc/asb-frp/frps.toml >/dev/null\n"
         + "$SUDO chmod 600 /etc/asb-frp/frps.toml\n"
         + "$SUDO tee /etc/systemd/system/asb-frps.service >/dev/null <<'UNIT'\n"
-        + "[Unit]\nDescription=Agent Bridge FRP server\nAfter=network-online.target\nWants=network-online.target\n"
+        + "[Unit]\nDescription=agentBridge FRP server\nAfter=network-online.target\nWants=network-online.target\n"
         + "[Service]\nExecStart=/opt/asb-frp/bin/frps -c /etc/asb-frp/frps.toml\nRestart=always\nRestartSec=3\nUser=root\n"
         + "[Install]\nWantedBy=multi-user.target\nUNIT\n"
         + "$SUDO systemctl daemon-reload\n$SUDO systemctl enable --now asb-frps\n"
@@ -1497,7 +1497,7 @@ final class PhoneBridge {
         + "printf '%s' " + shellQuote(encoded) + " | base64 -d | $SUDO tee /etc/asb-frp/frps.toml >/dev/null\n"
         + "$SUDO chmod 600 /etc/asb-frp/frps.toml\n"
         + "$SUDO tee /etc/systemd/system/asb-frps.service >/dev/null <<'UNIT'\n"
-        + "[Unit]\nDescription=Agent Bridge FRP server\nAfter=network-online.target\nWants=network-online.target\n"
+        + "[Unit]\nDescription=agentBridge FRP server\nAfter=network-online.target\nWants=network-online.target\n"
         + "[Service]\nExecStart=/opt/asb-frp/bin/frps -c /etc/asb-frp/frps.toml\nRestart=always\nRestartSec=3\nUser=root\n"
         + "[Install]\nWantedBy=multi-user.target\nUNIT\n"
         + "printf 'ASB_STAGE=service\\n'\n"
@@ -1529,7 +1529,7 @@ final class PhoneBridge {
         + "  systemctl --user disable --now asb-frpc.service 2>/dev/null || true\n"
         + "  mkdir -p \"$HOME/.config/systemd/user\"\n"
         + "  cat > \"$HOME/.config/systemd/user/asb-frpc.service\" <<'UNIT'\n"
-        + "[Unit]\nDescription=Agent Bridge FRP client\nAfter=default.target\n[Service]\nExecStart=%h/.asb-frp/bin/frpc -c %h/.config/agent-session-bridge/frpc.toml\nRestart=always\nRestartSec=3\n[Install]\nWantedBy=default.target\nUNIT\n"
+        + "[Unit]\nDescription=agentBridge FRP client\nAfter=default.target\n[Service]\nExecStart=%h/.asb-frp/bin/frpc -c %h/.config/agent-session-bridge/frpc.toml\nRestart=always\nRestartSec=3\n[Install]\nWantedBy=default.target\nUNIT\n"
         + "  printf 'ASB_STAGE=service\\n'\n"
         + "  systemctl --user daemon-reload\nsystemctl --user enable --now asb-frpc.service\n"
         + "  systemctl --user restart asb-frpc.service\nsleep 1\nsystemctl --user is-active --quiet asb-frpc.service\n"
@@ -1555,7 +1555,7 @@ final class PhoneBridge {
         + "printf '%s' " + shellQuote(encoded) + " | base64 -d | $SUDO tee /etc/asb-frp/" + label + ".toml >/dev/null\n"
         + "$SUDO chmod 600 /etc/asb-frp/" + label + ".toml\n"
         + "$SUDO tee /etc/systemd/system/asb-frpc-" + label + ".service >/dev/null <<'UNIT'\n"
-        + "[Unit]\nDescription=Agent Bridge FRP visitor " + name + "\nAfter=network-online.target\nWants=network-online.target\n"
+        + "[Unit]\nDescription=agentBridge FRP visitor " + name + "\nAfter=network-online.target\nWants=network-online.target\n"
         + "[Service]\nExecStart=/opt/asb-frp/bin/frpc-visitor -c /etc/asb-frp/" + label + ".toml\nRestart=always\nRestartSec=3\nUser=root\n"
         + "[Install]\nWantedBy=multi-user.target\nUNIT\n"
         + "printf 'ASB_STAGE=service\\n'\n"

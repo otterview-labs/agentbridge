@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `AgentBridge HTTP server listening on http://${address.host}:${address.port}`,
+    `agentBridge HTTP server listening on http://${address.host}:${address.port}`,
   );
 }
 

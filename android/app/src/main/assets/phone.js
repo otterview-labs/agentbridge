@@ -508,14 +508,14 @@
 
   function frpDeploymentToast(server) {
     if (server && server.deployment === 'adopted-existing') return '已复用服务器上的 FRP，请继续开通机器';
-    if (server && server.deployment === 'reused') return 'Agent Bridge FRP 已复用，请继续开通机器';
+    if (server && server.deployment === 'reused') return 'agentBridge FRP 已复用，请继续开通机器';
     return '入口服务已启动，请继续开通机器';
   }
 
   function frpDeploymentText(server) {
     if (!server || !server.deployment) return '';
     if (server.deployment === 'adopted-existing') return ' · 复用已有 FRP';
-    if (server.deployment === 'reused') return ' · 复用 Agent Bridge FRP';
+    if (server.deployment === 'reused') return ' · 复用 agentBridge FRP';
     return '';
   }
 

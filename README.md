@@ -1,6 +1,6 @@
-# AgentBridge
+# agentBridge
 
-AgentBridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
+agentBridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
 
 > [!WARNING]
 > 本项目可以读取工作区文件、向会话发送输入，并执行经过审批的本机命令。默认只监听 `127.0.0.1`。远程使用时必须配置 API Token、允许的 Host 和工作区目录，并通过受信任的 HTTPS 反向代理或 VPN 接入。
@@ -195,6 +195,10 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 | `ASB_FEISHU_ALLOWED_CHAT_IDS` | 允许控制服务的飞书群聊列表 |
 | `ASB_FEISHU_NOTIFY_CHAT_IDS` | 接收审批和失败操作通知的群聊列表 |
 | `ASB_SERVER_MANAGER_PATH` | 可选服务器管理项目的路径 |
+| `ASB_SSH_HOST_KEY_POLICY` | 远程 SSH 主机密钥策略：`accept-new`（默认，首次连接信任、密钥变更拒绝）或 `strict`（只接受 `known_hosts` 中已有的主机） |
+| `ASB_FRP_DOWNLOAD_BASE` | FRP 二进制下载源，默认 GitHub releases；每个云端入口可在 Web UI 中单独覆盖 |
+| `ASB_FRP_VERSION` | FRP 版本，默认 `0.61.1` |
+| `ASB_FRPC_BIN` | 复用已安装的 `frpc`，留空则由服务自行下载 |
 
 ## 安全
 
@@ -242,17 +246,15 @@ npm run check
 
 - [架构说明](docs/architecture.md)
 - [命令说明](docs/commands.md)
+- [指挥中心](docs/command-center.md)
 - [FRP 公网中转](docs/frp-relay.md)
 - [Android App](docs/android-app.md)
+- [Pi 小镇工作室](docs/pi-studio.md)
 - [开发路线](docs/roadmap.md)
 - [贡献指南](CONTRIBUTING.md)
 - [支持范围](SUPPORT.md)
 - [版本记录](CHANGELOG.md)
 - [安全策略](SECURITY.md)
-
-## 许可证
-
-[Apache License 2.0](LICENSE)
 
 ## Pi 小镇工作室
 
@@ -262,3 +264,7 @@ Pi 分析生成的日报 / 明日建议和显式用户记忆。Android 0.5.0 使
 页面内可配置模型提供商、API 地址和加密保存的密钥，原有控制台仍可进入。
 Pi 默认关闭，配置方法与数据边界见
 [Pi 工作室说明](docs/pi-studio.md)。
+
+## 许可证
+
+[Apache License 2.0](LICENSE)

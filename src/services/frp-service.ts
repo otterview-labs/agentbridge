@@ -585,7 +585,7 @@ printf '%s' ${shellQuote(configBase64)} | base64 -d | $SUDO tee /etc/asb-frp/frp
 $SUDO chmod 600 /etc/asb-frp/frps.toml
 $SUDO tee /etc/systemd/system/asb-frps.service >/dev/null <<'UNIT'
 [Unit]
-Description=AgentBridge FRP server
+Description=agentBridge FRP server
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -646,7 +646,7 @@ else
     $SUDO chmod 600 /etc/asb-frp/frpc.toml
     $SUDO tee /etc/systemd/system/asb-frpc.service >/dev/null <<'UNIT'
 [Unit]
-Description=AgentBridge FRP client
+Description=agentBridge FRP client
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -663,7 +663,7 @@ UNIT
     mkdir -p "$HOME/.config/systemd/user"
     cat > "$HOME/.config/systemd/user/asb-frpc.service" <<'UNIT'
 [Unit]
-Description=AgentBridge FRP client
+Description=agentBridge FRP client
 After=default.target
 [Service]
 ExecStart=%h/.asb-frp/bin/frpc -c %h/.config/agent-session-bridge/frpc.toml

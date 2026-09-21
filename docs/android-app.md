@@ -91,7 +91,7 @@ only needs SSH access and permission to read the relevant Claude/Codex files.
 The **公网** tab uses a three-field quick setup: public server address, SSH
 user, and password. FRP address, ports, version, download source, and key auth
 are tucked into **高级配置**. Saving automatically inspects the public machine,
-reuses a healthy **Agent Bridge-managed** FRP service when possible, adopts a
+reuses a healthy **agentBridge-managed** FRP service when possible, adopts a
 healthy third-party `frps` when its port and auth token can be read, and otherwise
 installs a separate `asb-frps` service. Adoption is read-only: existing services,
 configuration, and proxies are not stopped or overwritten. If an existing service

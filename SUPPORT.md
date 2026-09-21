@@ -1,6 +1,6 @@
 # Support
 
-AgentBridge is an experimental, self-hosted developer tool maintained on a best-effort basis.
+agentBridge is an experimental, self-hosted developer tool maintained on a best-effort basis.
 
 - Usage questions and reproducible bugs: open a GitHub Issue.
 - Feature proposals: open a GitHub Issue with the use case and expected security boundary.

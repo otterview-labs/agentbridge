@@ -1,6 +1,6 @@
 {
-  "name": "AgentBridge",
-  "short_name": "AgentBridge",
+  "name": "agentBridge",
+  "short_name": "agentBridge",
   "description": "Manage local Codex, Claude Code, and Gemini CLI sessions.",
   "start_url": "/",
   "scope": "/",

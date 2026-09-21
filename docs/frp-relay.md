@@ -24,7 +24,7 @@ the release SHA-256 checksum file. The base comes from `ASB_FRP_DOWNLOAD_BASE`,
 but each cloud entry can override it from the **下载源** field when the default
 GitHub endpoint is unreachable; the override is stored per server and used for
 that server's `frps` and `frpc` downloads. An existing third-party `frps` can be adopted
-read-only; Agent Bridge stores its bind port and token but does not rewrite its
+read-only; agentBridge stores its bind port and token but does not rewrite its
 configuration or restart it. When no reusable service exists, cloud `frps` runs
 as a systemd service. LAN clients use launchd on macOS and systemd on Linux
 (user systemd when sudo is unavailable).
