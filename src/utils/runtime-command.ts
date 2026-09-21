@@ -1,4 +1,7 @@
 import { splitCommandLine } from './shell.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=.*/u;
 
@@ -49,6 +52,31 @@ export function extractCommandBinary(commandLine: string): string | null {
   }
 
   return tokens[index] ?? null;
+}
+
+export function resolveCommandExecutable(commandLine: string): string {
+  const binary = extractCommandBinary(commandLine) ?? commandLine.trim();
+  if (!binary || binary.includes(path.sep)) {
+    return binary;
+  }
+
+  const directories = [
+    ...String(process.env.PATH ?? '').split(path.delimiter),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(os.homedir(), '.npm-global/bin'),
+    path.join(os.homedir(), '.local/bin'),
+  ].filter(Boolean);
+
+  for (const directory of new Set(directories)) {
+    const candidate = path.join(directory, binary);
+    try {
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {
+      // Continue with the next common installation directory.
+    }
+  }
+  return binary;
 }
 
 export function shellQuote(value: string): string {

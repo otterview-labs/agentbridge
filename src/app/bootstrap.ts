@@ -13,11 +13,16 @@ import { ConversationService } from '../services/conversation-service.js';
 import { MachineService } from '../services/machine-service.js';
 import { NotificationService } from '../services/notification-service.js';
 import { ServerManagerService } from '../services/server-manager-service.js';
-import { SessionService } from '../services/session-service.js';
+import { FrpService } from '../services/frp-service.js';
+  import { SessionService } from '../services/session-service.js';
+  import { SshMachineService } from '../services/ssh-machine-service.js';
 import { SessionEventBus } from '../services/session-event-bus.js';
 import { SupervisorService } from '../services/supervisor-service.js';
 import { TerminalService } from '../services/terminal-service.js';
 import { TaskService } from '../services/task-service.js';
+import { StudioService } from '../services/studio-service.js';
+import { createPiModel } from '../services/pi-studio-model.js';
+import { StudioModelSettings } from '../services/studio-model-settings.js';
 import { TmuxCliAgentAdapter } from '../services/tmux-cli-agent-adapter.js';
 import { TmuxCodexAgentAdapter } from '../services/tmux-codex-agent-adapter.js';
 import { WorkspaceService } from '../services/workspace-service.js';
@@ -29,6 +34,7 @@ import { DatabaseClient } from '../infra/storage/database.js';
 import { SqliteSessionRepository } from '../infra/repositories/sqlite-session-repository.js';
 import { SqliteTerminalCommandRepository } from '../infra/repositories/sqlite-terminal-command-repository.js';
 import { TmuxManager } from '../infra/tmux/tmux-manager.js';
+import { resolveCommandExecutable } from '../utils/runtime-command.js';
 
 export function createApplication() {
   loadEnvFile(process.cwd());
@@ -150,11 +156,35 @@ export function createApplication() {
     repository: machineRepository,
     sessionService,
   });
+  const sshMachineService = new SshMachineService({
+    claudeBin: resolveCommandExecutable(config.claudeBin),
+    codexBin: resolveCommandExecutable(config.codexBin),
+    database,
+    logger: logger.child({ component: 'ssh-machine-service' }),
+    machines: machineService,
+  });
+  const frpService = new FrpService({
+    database,
+    downloadBase: config.frpDownloadBase,
+    frpcBin: config.frpcBin,
+    logger: logger.child({ component: 'frp-service' }),
+    machines: machineService,
+    ssh: sshMachineService,
+    stateDir: path.join(config.dataDir, 'frp'),
+    version: config.frpVersion,
+  });
   const feishuTokenService = new FeishuTokenService({
     config,
     logger: logger.child({ component: 'feishu-token' }),
   });
   const taskService = new TaskService({ database, sessions: sessionService, machines: machineService });
+  const studioModelSettings = new StudioModelSettings({
+    database, keyPath: path.join(config.dataDir, 'pi-model.key'), env: process.env, factory: createPiModel,
+  });
+  const studioService = new StudioService({
+    database, tasks: taskService, machines: machineService, ssh: sshMachineService,
+    modelProvider: () => studioModelSettings.model(),
+  });
   const feishuApiClient = new FeishuApiClient({
     logger: logger.child({ component: 'feishu-api' }),
     replyInThread: config.feishuReplyInThread,
@@ -191,6 +221,8 @@ export function createApplication() {
   });
 
   return {
+    studioModelSettings,
+    studioService,
     taskService,
     agentAdapters,
     agentRuntimeService,
@@ -205,6 +237,7 @@ export function createApplication() {
     feishuApiClient,
     feishuChannel,
     feishuTokenService,
+    frpService,
     logger,
     machineRepository,
     machineService,
@@ -213,6 +246,7 @@ export function createApplication() {
     sessionEventBus,
     sessionRepository,
     sessionService,
+    sshMachineService,
     supervisorService,
     terminalCommandRepository,
     terminalService,

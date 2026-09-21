@@ -28,7 +28,7 @@
   ],
   "packageManager": "npm@11.8.0",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.19.0"
   },
   "bin": {
     "agent-session-bridge": "./dist/cli.js"
@@ -45,6 +45,8 @@
     "check": "npm run typecheck && npm test && npm run clean && npm run build"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.86.0",
+    "@earendil-works/pi-ai": "0.86.0",
     "@larksuiteoapi/node-sdk": "^1.73.1",
     "diff": "^9.0.0",
     "isomorphic-git": "^1.41.9",

@@ -15,6 +15,7 @@ const apiTokenState = createApiTokenState({ localStorage, sessionStorage });
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get('layout') === 'app' || mobileMedia.matches) {
   document.body.classList.add('appShell');
+  document.querySelector('.brandTitle').textContent = '工作台';
 }
 
 const state = {
@@ -168,6 +169,7 @@ const elements = {
 
 const commandCenter = createCommandCenter({
   getState: () => state, apiGet, apiPost, selectSession, showView,
+  getApiToken: () => apiTokenState.get(),
   refreshAll: () => refreshAll({ silent: true }),
 });
 
@@ -1040,7 +1042,10 @@ function setSheetOpen(isOpen) {
 }
 
 function syncResponsiveChrome() {
-  if (mobileMedia.matches) {
+  if (document.body.classList.contains('appShell')) {
+    elements.filterSheet.classList.remove('hidden');
+    elements.sheetBackdrop.classList.add('hidden');
+  } else if (mobileMedia.matches) {
     elements.filterSheet.classList.toggle('hidden', !state.sheetOpen);
     elements.sheetBackdrop.classList.toggle('hidden', !state.sheetOpen);
   } else {

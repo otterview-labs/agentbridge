@@ -12,6 +12,8 @@ Agent Session Bridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 
 - 任务和时间线保存在 SQLite；远程 Runner 尚未实现，不会将远程登记显示为可执行
 
 任务流程、监督边界及 API 见 [`docs/command-center.md`](docs/command-center.md)。
+SSH 机器发现与 FRP 公网中转见 [`docs/frp-relay.md`](docs/frp-relay.md)。
+Android WebView 壳与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
 
 - 按工作区创建、切换、重命名和停止会话
 - 使用 `tmux` 保持会话持续运行
@@ -240,6 +242,8 @@ npm run check
 
 - [架构说明](docs/architecture.md)
 - [命令说明](docs/commands.md)
+- [FRP 公网中转](docs/frp-relay.md)
+- [Android App](docs/android-app.md)
 - [开发路线](docs/roadmap.md)
 - [贡献指南](CONTRIBUTING.md)
 - [支持范围](SUPPORT.md)
@@ -249,3 +253,12 @@ npm run check
 ## 许可证
 
 [Apache License 2.0](LICENSE)
+
+## Pi 小镇工作室
+
+新增 `/studio`：响应式 Web / 手机工作室，包含管家对话、像素办公室、
+Pi 分析生成的日报 / 明日建议和显式用户记忆。Android 0.5.0 使用同一页面资源，
+支持连接 Hub 共享对话、记忆和日报，并可选择上传本机任务摘要。
+页面内可配置模型提供商、API 地址和加密保存的密钥，原有控制台仍可进入。
+Pi 默认关闭，配置方法与数据边界见
+[Pi 工作室说明](docs/pi-studio.md)。

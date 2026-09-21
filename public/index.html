@@ -24,6 +24,7 @@
         </div>
 
         <div class="topActions">
+          <a class="ghostBtn" href="/studio">Pi 小镇工作室</a>
           <div class="brandSignalPill" aria-label="管理范围">
             <span>Session Control</span>
             <strong>Sessions · Machines · Services</strong>
@@ -180,7 +181,7 @@
         <section class="workspaceColumn mainStage main">
           <section id="commandCenter" class="commandCenter">
             <div class="overviewHeading">
-              <div><p class="eyebrow">AGENT SESSION BRIDGE / CONTROL</p><h1 id="centerTitle">指挥中心<span class="headingDot">.</span></h1><p id="centerSubtitle" class="chatSubtle">看清执行位置、任务目标与下一步责任。</p></div>
+              <div><p class="eyebrow">AGENT SESSION BRIDGE / CONTROL</p><h1 id="centerTitle">工作台<span class="headingDot">.</span></h1><p id="centerSubtitle" class="chatSubtle">查看机器、任务和待处理事项。</p></div>
               <button id="createTaskButton" class="primaryBtn" type="button">+ 新建任务</button>
             </div>
             <div id="centerConnection" class="connectionNote" role="status">正在读取管理中心数据…</div>
@@ -188,19 +189,34 @@
               <div class="townHeader">
                 <div>
                   <p class="eyebrow">PIXEL OFFICE TOWN</p>
-                  <h2 id="officeTownTitle">AI 办公园区</h2>
-                  <p>每台机器是一间办公室，每项任务是一位员工。画面使用真实登记数据，不插入示例任务。</p>
+                  <h2 id="officeTownTitle">工作现场</h2>
+                  <p>机器是办公室，任务是员工；这里显示当前状态。</p>
                 </div>
                 <dl class="townLegend" aria-label="员工状态图例">
-                  <div><dt><i class="legendPixel running"></i>敲键盘</dt><dd>执行中</dd></div>
-                  <div><dt><i class="legendPixel attention"></i>举手</dt><dd>需要核实</dd></div>
-                  <div><dt><i class="legendPixel review"></i>检查清单</dt><dd>待你验收</dd></div>
-                  <div><dt><i class="legendPixel queued"></i>工牌闪烁</dt><dd>待下发</dd></div>
+                  <div><dt><i class="legendPixel running"></i>运行中</dt><dd>正在执行</dd></div>
+                  <div><dt><i class="legendPixel attention"></i>需确认</dt><dd>等待处理</dd></div>
+                  <div><dt><i class="legendPixel review"></i>待验收</dt><dd>等待检查</dd></div>
+                  <div><dt><i class="legendPixel queued"></i>待下发</dt><dd>尚未发送</dd></div>
                 </dl>
               </div>
               <div id="townRooms" class="townRooms" aria-live="polite"></div>
             </section>
+            <section id="todoSection" class="todoSection" hidden aria-labelledby="todoTitle">
+              <div class="workListHeading">
+                <h2 id="todoTitle">待办</h2>
+                <span id="todoCount" class="countBadge">0</span>
+              </div>
+              <div id="todoList" class="todoList"></div>
+            </section>
             <div class="centerMetrics" id="centerMetrics"></div>
+            <div class="sshMachineToolbar">
+              <div><p class="eyebrow">SSH MACHINES</p><h2>机器</h2></div>
+              <div class="sshMachineActions">
+                <button id="addSshMachineButton" class="ghostBtn" type="button">+ 添加 SSH 机器</button>
+                <button id="configureFrpServerButton" class="ghostBtn" type="button">部署公网 FRP</button>
+                <button id="configureFrpRelayButton" class="ghostBtn" type="button">开放中转</button>
+              </div>
+            </div>
             <div id="centerMachines" class="centerMachines"></div>
             <section id="centerTaskSection">
               <div class="workListHeading"><h2 id="centerListTitle">任务与执行</h2><span class="syncLabel">明确目标 · 指定执行者 · 人工验收</span></div>
@@ -661,6 +677,52 @@
       <div class="dialogHeader"><h2 id="taskDetailTitle">任务详情</h2><button type="button" class="ghostBtn" data-close-dialog="taskDetailDialog">关闭</button></div>
       <div id="taskDetailBody"></div>
       <p id="taskDetailError" role="alert" class="errorText"></p>
+    </dialog>
+    <dialog id="sshMachineDialog" class="taskDialog" aria-labelledby="sshMachineTitle">
+      <form id="sshMachineForm">
+        <div class="dialogHeader"><div><p class="eyebrow">SSH DISCOVERY</p><h2 id="sshMachineTitle">添加 SSH 机器</h2></div><button type="button" class="ghostBtn" data-close-dialog="sshMachineDialog">关闭</button></div>
+        <p class="connectionNote">只支持 SSH Key / ssh-agent 免密登录。添加后会检测 Claude、Codex、Gemini 和 tmux；不会安装任何程序。</p>
+        <label class="field">机器名称<input name="name" required maxlength="48" placeholder="mac-pro" /></label>
+        <label class="field">SSH Host / Alias<input name="host" required maxlength="160" placeholder="192.168.1.110 或 mac-pro" /></label>
+        <div class="fieldGrid">
+          <label class="field">SSH 用户<input name="user" maxlength="64" placeholder="当前 ssh 配置" /></label>
+          <label class="field">端口<input name="port" type="number" min="1" max="65535" value="22" required /></label>
+        </div>
+        <label class="field">Hub 本机私钥路径（可选）<input name="privateKeyPath" maxlength="512" placeholder="~/.ssh/id_ed25519" /></label>
+        <p id="sshMachineError" role="alert" class="errorText"></p>
+        <button class="primaryBtn" type="submit" id="sshMachineSubmit">连接并检测</button>
+      </form>
+    </dialog>
+    <dialog id="frpServerDialog" class="taskDialog" aria-labelledby="frpServerTitle">
+      <form id="frpServerForm">
+        <div class="dialogHeader"><div><p class="eyebrow">FRP SERVER</p><h2 id="frpServerTitle">自动部署云端 frps</h2></div><button type="button" class="ghostBtn" data-close-dialog="frpServerDialog">关闭</button></div>
+        <p class="connectionNote">选择一台已通过 SSH 接入的公网 Linux 机器。部署需要 root 或免密 sudo；会安装 frps、写入 systemd 服务并开启 TLS。</p>
+        <label class="field">公网 SSH 机器<select id="frpServerMachineSelect" name="machineId" required></select></label>
+        <div class="fieldGrid">
+          <label class="field">FRP 端口<input name="bindPort" type="number" min="1024" max="65535" value="7000" required /></label>
+          <label class="field">FRP 版本<input name="version" maxlength="24" value="0.61.1" required /></label>
+        </div>
+        <label class="field">公网地址（默认使用机器 Host）<input name="publicAddress" maxlength="160" placeholder="frp.example.com 或公网 IP" /></label>
+        <label class="field">下载源（可换镜像）<input name="downloadBase" maxlength="512" placeholder="https://github.com/fatedier/frp/releases/download" /></label>
+        <p id="frpServerError" role="alert" class="errorText"></p>
+        <button class="primaryBtn" type="submit" id="frpServerSubmit">部署 frps</button>
+      </form>
+    </dialog>
+    <dialog id="frpRelayDialog" class="taskDialog" aria-labelledby="frpRelayTitle">
+      <form id="frpRelayForm">
+        <div class="dialogHeader"><div><p class="eyebrow">FRP RELAY</p><h2 id="frpRelayTitle">开放局域网机器到公网</h2></div><button type="button" class="ghostBtn" data-close-dialog="frpRelayDialog">关闭</button></div>
+        <p class="connectionNote">使用 FRP STCP，不暴露 SSH 端口。Hub 会自动部署远端 frpc，并在本地启动 visitor；后续 SSH 会改走 127.0.0.1:22xxx。</p>
+        <label class="field">局域网 SSH 机器<select id="frpRelayMachineSelect" name="machineId" required></select></label>
+        <label class="field">公网 FRP 入口<select id="frpRelayServerSelect" name="serverId" required></select></label>
+        <p id="frpRelayError" role="alert" class="errorText"></p>
+        <button class="primaryBtn" type="submit" id="frpRelaySubmit">部署 frpc 并切换中转</button>
+      </form>
+    </dialog>
+    <dialog id="frpCommandDialog" class="taskDialog" aria-labelledby="frpCommandTitle">
+      <div class="dialogHeader"><div><p class="eyebrow">ONE-LINE ENROLL</p><h2 id="frpCommandTitle">frpc 一键接入命令</h2></div><button type="button" class="ghostBtn" data-close-dialog="frpCommandDialog">关闭</button></div>
+      <p class="connectionNote">自动部署失败时，可在目标机器执行下面的命令修复。命令包含 FRP 密钥，不要发给别人。</p>
+      <pre id="frpCommandText" class="filePreview"></pre>
+      <div class="taskDetailActions"><button id="copyFrpCommandButton" class="primaryBtn" type="button">复制命令</button></div>
     </dialog>
 
     <script src="/app.js" type="module"></script>

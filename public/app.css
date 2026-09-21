@@ -615,8 +615,9 @@ button:disabled { opacity: .6; }
 .employee[data-state="attention"] .pixelAvatar { animation: employeeAttention .9s steps(2,end) infinite; }
 .employee[data-state="review"] .pixelAvatar { animation: employeeReview 1.4s steps(2,end) infinite; }
 .employee[data-state="queued"] .pixelAvatar { animation: employeeWaiting 1.8s steps(2,end) infinite; }
-.emptyDesk { display: grid; place-content: center; gap: 6px; min-height: 140px; padding: 16px; border: 2px dashed #c4b795; border-radius: 2px; color: #74826e; text-align: center; background: #f9f5e9; }
-.emptyDesk::before { content: ""; width: 54px; height: 31px; margin: 0 auto; border: 2px solid #a8a088; background: #d7d2bd; box-shadow: inset 0 0 0 5px #ebe7d8; }
+.emptyDesk { position: relative; display: grid; place-content: center; gap: 6px; min-height: 140px; padding: 16px; border: 2px solid #c4b795; border-radius: 0; color: #74826e; text-align: center; background: #f9f5e9; }
+.emptyDesk::before { content: ""; position: absolute; left: 50%; top: 22px; width: 54px; height: 31px; margin-left: -27px; border: 2px solid #a8a088; background: #d7d2bd; box-shadow: inset 0 0 0 5px #ebe7d8; }
+.emptyDesk::after { content: ""; position: absolute; left: 50%; bottom: 18px; width: 34px; height: 19px; margin-left: -17px; border: 2px solid #a8a088; background: #e6dfc9; box-shadow: 5px 5px 0 #c8bd9d; }
 .emptyDesk strong { color: #4d5a47; font-size: 12px; }
 .emptyDesk span { font-size: 10px; line-height: 1.5; }
 
@@ -653,7 +654,7 @@ button:disabled { opacity: .6; }
 .appShell #refreshButton { padding: 7px 9px; font-size: 11px; }
 .appShell .controlContextBar { display: none; }
 .appShell .workbench { display: block; min-height: 0; padding: 0; }
-.appShell .workbenchSidebar { position: fixed; left: 50%; bottom: 0; z-index: 50; display: block; width: min(100%, 430px); height: auto; min-width: 0; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); background: #fffdf8f7; border-right: 0; border-top: 2px solid #3b382f; box-shadow: 0 -8px 22px #3b382f18; transform: translateX(-50%); }
+.appShell .workbenchSidebar { position: fixed; top: auto; left: 50%; bottom: 0; z-index: 50; display: block; width: min(100%, 430px); height: auto; min-width: 0; padding: 7px 8px calc(7px + env(safe-area-inset-bottom)); background: #fffdf8f7; border-right: 0; border-top: 2px solid #3b382f; box-shadow: 0 -8px 22px #3b382f18; transform: translateX(-50%); overflow: visible; }
 .appShell .sideContent { display: none; }
 .appShell .leftRail { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin: 0; }
 .appShell .railBtn { flex-direction: column; justify-content: center; gap: 3px; padding: 6px 2px; border: 0; border-radius: 0; color: #74826e; font-size: 10px; line-height: 1.2; text-align: center; box-shadow: none; }
@@ -711,3 +712,79 @@ button:disabled { opacity: .6; }
 .appShell .overviewSupport, .appShell .supervisionGuide { display: none; }
 .appShell[data-view="machines"] .overviewSupport { display: block; }
 .appShell[data-view="tasks"] .centerMetrics { display: none; }
+
+.sshMachineToolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 12px; }
+.sshMachineToolbar h2 { color: #33422f; font-size: 16px; }
+.sshMachineActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.frpSummary { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: -4px 0 12px; padding: 9px 10px; border: 2px solid #d8d0ba; border-radius: 3px; background: #fffdf8; box-shadow: 3px 3px 0 #3b382f10; }
+.frpSummary strong { color: #33422f; font-size: 12px; }
+.frpSummary span { padding: 3px 6px; border: 1px solid #ded6c2; border-radius: 2px; background: #f5f6ec; color: #6d7a66; font-size: 10px; }
+.frpSummary .errorText { border-color: #bf5748; background: #fff; color: var(--bad); }
+.frpChip { display: inline-flex; padding: 3px 6px; border: 1px solid #cbd8c1; border-radius: 2px; background: #e5eddf; color: #33543b; font-size: 10px; }
+.frpChip.ok { border-color: #9dbd94; background: #d8e8cf; }
+.frpChip.bad { border-color: #e0a9a0; background: #f8e5e0; color: #a84537; }
+.fieldGrid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
+.machineEntry { border: 2px solid #d8d0ba; border-radius: 3px; background: #fffdf8; box-shadow: 4px 4px 0 #3b382f12; }
+.appShell .sshMachineToolbar { display: grid; gap: 7px; margin-bottom: 8px; }
+.appShell .sshMachineActions { justify-content: flex-start; }
+.appShell .sshMachineToolbar .ghostBtn { justify-self: start; }
+.appShell .frpSummary { display: grid; gap: 5px; margin-bottom: 8px; }
+.appShell .fieldGrid { grid-template-columns: minmax(0, 1fr); }
+
+/* Mobile product tone: fewer explanations, one primary empty state, compact scene. */
+.appShell .eyebrow { display: none; }
+.appShell .townHeader > div > p { display: none; }
+.appShell .townLegend { display: none; }
+.appShell .townHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.appShell .townHeader h2 { font-size: 16px; }
+.appShell .townRooms { min-height: 208px; padding: 30px 10px 56px; }
+.appShell .townRooms::before { bottom: 26px; height: 24px; }
+.appShell .townRooms::after { display: none; }
+.appShell .officeRoom { max-width: 310px; }
+.appShell .officeRoom::before { height: 17px; margin-bottom: 7px; }
+.appShell .officeSign { margin-top: -3px; margin-bottom: 7px; padding: 6px 7px; }
+.appShell .officeSign h3 { font-size: 13px; }
+.appShell .officeNote { font-size: 9px; }
+.appShell .officeFloor { min-height: 106px; padding: 8px; background-position: 0 30px, 0 0; }
+.appShell .employeeStage { height: 86px; }
+.appShell .employeeStage::before { top: 8px; width: 33px; height: 23px; box-shadow: inset 0 0 0 4px #8ba0b0, 0 4px 0 var(--ink); }
+.appShell .employeeStage::after { bottom: 8px; width: 61px; height: 11px; }
+.appShell .pixelAvatar { bottom: 11px; width: 42px; height: 51px; }
+.appShell .employeeIdentity { padding: 4px 5px; }
+.appShell .employeeName { font-size: 10px; }
+.appShell .employeeTag { font-size: 8px; }
+.appShell .officeFooter { padding: 6px 8px; }
+.appShell .emptyDesk { min-height: 90px; padding-top: 58px; }
+.appShell .emptyDesk::before { top: 13px; width: 45px; height: 26px; margin-left: -22px; }
+.appShell .emptyDesk::after { display: none; }
+.appShell .emptyDesk strong { font-size: 11px; }
+.appShell .emptyDesk span { font-size: 9px; }
+.appShell:not(.has-tasks)[data-view="overview"] .centerMetrics,
+.appShell:not(.has-tasks)[data-view="overview"] #centerTaskSection { display: none !important; }
+.appShell #createTaskButton { right: max(12px, calc((100vw - 430px) / 2 + 12px)); bottom: 122px; width: 48px; height: 48px; border-radius: 4px; }
+.appShell #createTaskButton::before { font-size: 23px; }
+.appShell #configureFrpServerButton,
+.appShell #configureFrpRelayButton { display: none; }
+.appShell .connectionNote { padding: 6px 8px; font-size: 10px; }
+.appShell .overviewHeading h1 { font-size: 21px; }
+.appShell .overviewHeading .chatSubtle { display: none; }
+.appShell [data-view="workspace"] { display: none !important; }
+.appShell:not(.has-tasks) #createTaskButton { display: none; }
+
+.todoSection { margin: 0 0 10px; padding: 10px; border: 2px solid #d8d0ba; border-radius: 3px; background: #fffdf8; box-shadow: 3px 3px 0 #3b382f10; }
+.todoSection .workListHeading { margin-bottom: 7px; }
+.todoList { display: grid; gap: 7px; }
+.todoRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 9px; border: 1px solid #ded6c2; border-radius: 2px; background: #f7f4ea; }
+.todoRow > div { min-width: 0; display: grid; gap: 2px; }
+.todoRow strong { overflow: hidden; color: #33422f; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.todoRow span { color: #8a6a25; font-size: 10px; }
+.todoRow.needsInput { border-color: #e0b473; background: #f8eeda; }
+.todoRow.needsInput span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.taskRenameForm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin: 8px 0 12px; }
+.taskRenameForm input { padding: 7px 8px; font-size: 12px; }
+.appShell .todoSection { padding: 8px; }
+.appShell .todoRow strong { font-size: 11px; }
+.requiredInputSection { border: 2px solid #e0b473 !important; background: #fff9ea !important; }
+.requiredInputSection p { color: #5f4a21 !important; font-weight: 650 !important; }
+.suggestedReply { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding: 7px 8px; border: 1px dashed #c9a663; border-radius: 2px; background: #fffdf8; }
+.suggestedReply span { color: #33422f; font-size: 12px; }

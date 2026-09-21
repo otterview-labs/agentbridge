@@ -14,3 +14,9 @@ data/*
 !data/.gitkeep
 .DS_Store
 .tmp-*.log
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml

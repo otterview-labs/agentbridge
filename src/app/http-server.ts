@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { isIP, type AddressInfo } from 'node:net';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import nodePath from 'node:path';
 
 import type { Logger } from 'pino';
@@ -20,27 +23,35 @@ import { ApprovalService } from '../services/approval-service.js';
 import { ButlerService } from '../services/butler-service.js';
 import { CommandRouter } from '../services/command-router.js';
 import { ConversationService } from '../services/conversation-service.js';
+import { FrpService } from '../services/frp-service.js';
 import { MachineService } from '../services/machine-service.js';
 import { NotificationService } from '../services/notification-service.js';
 import { SessionEventBus } from '../services/session-event-bus.js';
 import { SessionService } from '../services/session-service.js';
+import { SshMachineService } from '../services/ssh-machine-service.js';
 import { SupervisorService } from '../services/supervisor-service.js';
 import { TerminalService } from '../services/terminal-service.js';
 import { TaskService } from '../services/task-service.js';
+import type { StudioService } from '../services/studio-service.js';
+import type { StudioModelSettings } from '../services/studio-model-settings.js';
 import { WorkspaceService } from '../services/workspace-service.js';
 
 type HttpApiServerOptions = {
+  studioModelSettings: StudioModelSettings;
+  studioService: StudioService;
   taskService: TaskService;
   approvalService: ApprovalService;
   butlerService: ButlerService;
   commandRouter: CommandRouter;
   config: AppConfig;
   conversationService: ConversationService;
+  frpService: FrpService;
   logger: Logger;
   machineService: MachineService;
   notificationService: NotificationService;
   sessionEventBus: SessionEventBus;
   sessionService: SessionService;
+  sshMachineService: SshMachineService;
   supervisorService: SupervisorService;
   terminalService: TerminalService;
   workspaceService: WorkspaceService;
@@ -55,6 +66,10 @@ type JsonValue =
   | { [key: string]: JsonValue };
 
 const STATIC_ASSETS = new Map<string, string>([
+  ['/studio', 'studio.html'],
+  ['/studio.html', 'studio.html'],
+  ['/studio.css', 'studio.css'],
+  ['/studio.js', 'studio.js'],
   ['/', 'index.html'],
   ['/ui', 'index.html'],
   ['/index.html', 'index.html'],
@@ -148,6 +163,89 @@ export class HttpApiServer {
       }
 
       this.authorize(request);
+
+      if (pathname === '/studio/model' && method === 'GET') {
+        this.sendJson(response, 200, this.options.studioModelSettings.publicState());
+        return;
+      }
+      if (pathname === '/studio/model' && method === 'PUT') {
+        this.sendJson(response, 200, this.options.studioModelSettings.save(await this.readJsonBody(request)));
+        return;
+      }
+      if (pathname === '/studio/model/test' && method === 'POST') {
+        this.sendJson(response, 200, await this.options.studioModelSettings.test(await this.readJsonBody(request)));
+        return;
+      }
+      if (pathname === '/studio/voice/transcriptions' && method === 'POST') {
+        const body = await this.readJsonBody(request) as { audioBase64?: unknown; contentType?: unknown };
+        const audioBase64 = typeof body.audioBase64 === 'string' ? body.audioBase64 : '';
+        if (!audioBase64 || audioBase64.length > 1_100_000) {
+          this.sendJson(response, 400, { error: '语音音频缺失或超过 800KB 限制。' });
+          return;
+        }
+        if (!/^[A-Za-z0-9+/]+={0,2}$/u.test(audioBase64)) {
+          this.sendJson(response, 400, { error: '语音音频格式无效。' });
+          return;
+        }
+        const contentType = typeof body.contentType === 'string' && body.contentType.startsWith('audio/')
+          ? body.contentType
+          : 'audio/mp4';
+        try {
+          const text = await this.transcribeWithLocalWhisper(
+            Buffer.from(audioBase64, 'base64'),
+            contentType,
+          );
+          this.sendJson(response, 200, { text });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '语音识别失败';
+          this.options.logger.warn({ err: error }, 'voice transcription failed');
+          this.sendJson(response, Number((error as { statusCode?: number }).statusCode) || 500, { error: message });
+        }
+        return;
+      }
+      if (pathname === '/studio/reports' && method === 'GET') {
+        this.sendJson(response, 200, { reports: this.options.studioService.reports(url.searchParams.get('date') ?? '') });
+        return;
+      }
+      if (pathname === '/studio/reports' && method === 'POST') {
+        const body = await this.readJsonBody(request);
+        this.sendJson(response, 201, { report: await this.options.studioService.generateReport(body.date) });
+        return;
+      }
+      const deviceMatch = /^\/studio\/devices\/([a-f0-9-]{36})\/(snapshot|memories)$/u.exec(pathname);
+      if (deviceMatch && method === 'POST') {
+        const body = await this.readJsonBody(request);
+        this.sendJson(response, 200, deviceMatch[2] === 'snapshot'
+          ? this.options.studioService.sync.receive(deviceMatch[1]!, body)
+          : this.options.studioService.sync.importMemories(deviceMatch[1]!, body.memories));
+        return;
+      }
+      if (deviceMatch && method === 'DELETE' && deviceMatch[2] === 'snapshot') {
+        this.options.studioService.sync.remove(deviceMatch[1]!);
+        this.sendJson(response, 200, { ok: true });
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/studio/state') {
+        this.sendJson(response, 200, await this.options.studioService.snapshot());
+        return;
+      }
+      if (method === 'POST' && pathname === '/studio/messages') {
+        const body = await this.readJsonBody(request);
+        this.sendJson(response, 200, await this.options.studioService.chat(body.content));
+        return;
+      }
+      if (method === 'POST' && pathname === '/studio/memories') {
+        const body = await this.readJsonBody(request);
+        this.sendJson(response, 201, { memory: this.options.studioService.addMemory(body.content) });
+        return;
+      }
+      const memoryMatch = /^\/studio\/memories\/([a-f0-9-]{36})$/u.exec(pathname);
+      if (method === 'DELETE' && memoryMatch) {
+        this.options.studioService.deleteMemory(memoryMatch[1]!);
+        this.sendJson(response, 200, { ok: true });
+        return;
+      }
 
       if (method === 'GET' && pathname === '/tasks') {
         this.sendJson(response, 200, { tasks: await this.options.taskService.list() });
@@ -285,6 +383,122 @@ export class HttpApiServer {
         this.sendJson(response, 200, {
           machines,
         });
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/machines/ssh') {
+        const body = await this.readJsonBody(request);
+        const result = await this.options.sshMachineService.addMachine({
+          host: requireString(body.host, 'host'),
+          name: requireString(body.name, 'name'),
+          port: getOptionalNumber(body.port) ?? 22,
+          privateKeyPath: getOptionalString(body.privateKeyPath) ?? undefined,
+          user: getOptionalString(body.user) ?? undefined,
+        });
+        this.sendJson(response, 201, {
+          machine: result.machine,
+          ok: true,
+          probe: result.probe,
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/ssh/tasks') {
+        this.sendJson(response, 200, {
+          tasks: await this.options.sshMachineService.listTasks(),
+        });
+        return;
+      }
+
+      if (method === 'GET' && pathname === '/frp/overview') {
+        this.sendJson(response, 200, await this.options.frpService.overview());
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/frp/servers') {
+        const body = await this.readJsonBody(request);
+        const server = await this.options.frpService.configureServer({
+          bindPort: getOptionalNumber(body.bindPort) ?? 7000,
+          downloadBase: getOptionalString(body.downloadBase) ?? undefined,
+          machineId: requirePositiveInteger(body.machineId, 'machineId'),
+          publicAddress: getOptionalString(body.publicAddress) ?? undefined,
+          version: getOptionalString(body.version) ?? undefined,
+        });
+        this.sendJson(response, 201, { ok: true, server });
+        return;
+      }
+
+      const frpServerAction = /^\/frp\/servers\/([1-9]\d*)\/deploy$/u.exec(pathname);
+      if (method === 'POST' && frpServerAction) {
+        this.sendJson(response, 200, {
+          ok: true,
+          server: await this.options.frpService.deployServer(Number(frpServerAction[1])),
+        });
+        return;
+      }
+
+      if (method === 'POST' && pathname === '/frp/relays') {
+        const body = await this.readJsonBody(request);
+        const relay = await this.options.frpService.configureRelay({
+          machineId: requirePositiveInteger(body.machineId, 'machineId'),
+          serverId: requirePositiveInteger(body.serverId, 'serverId'),
+        });
+        this.sendJson(response, 201, { ok: true, relay });
+        return;
+      }
+
+      const frpRelayAction = /^\/frp\/relays\/([1-9]\d*)\/(deploy|disable)$/u.exec(pathname);
+      if (method === 'POST' && frpRelayAction) {
+        const relay = frpRelayAction[2] === 'deploy'
+          ? await this.options.frpService.deployRelay(Number(frpRelayAction[1]))
+          : await this.options.frpService.disableRelay(Number(frpRelayAction[1]));
+        this.sendJson(response, 200, { ok: true, relay });
+        return;
+      }
+
+      const frpInstallScript = /^\/frp\/relays\/([1-9]\d*)\/install-script$/u.exec(pathname);
+      if (method === 'GET' && frpInstallScript) {
+        const script = this.options.frpService.installScript(Number(frpInstallScript[1]));
+        response.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Disposition': 'inline',
+          'Cache-Control': 'no-store',
+        });
+        response.end(script);
+        return;
+      }
+
+      const sshMachineAction = /^\/machines\/([1-9]\d*)\/ssh\/(probe|discover)$/u.exec(pathname);
+      if (method === 'POST' && sshMachineAction) {
+        const machineId = Number(sshMachineAction[1]);
+        if (sshMachineAction[2] === 'probe') {
+          this.sendJson(response, 200, {
+            ok: true,
+            probe: await this.options.sshMachineService.probeMachine(machineId),
+          });
+          return;
+        }
+        this.sendJson(response, 200, {
+          ok: true,
+          tasks: await this.options.sshMachineService.discoverTasks(machineId),
+        });
+        return;
+      }
+
+      const sshTaskAction = /^\/ssh\/tasks\/([1-9]\d*)\/(tail|send|rename)$/u.exec(pathname);
+      if (method === 'POST' && sshTaskAction) {
+        const body = await this.readJsonBody(request);
+        const taskId = Number(sshTaskAction[1]);
+        const task = sshTaskAction[2] === 'tail'
+          ? await this.options.sshMachineService.tailTask(taskId)
+          : sshTaskAction[2] === 'rename'
+            ? await this.options.sshMachineService.renameTask(taskId, requireString(body.title, 'title'))
+            : await this.options.sshMachineService.sendPrompt(
+              taskId,
+              requireString(body.prompt, 'prompt'),
+              resolveActorId(body, request),
+            );
+        this.sendJson(response, 200, { ok: true, task });
         return;
       }
 
@@ -776,6 +990,82 @@ export class HttpApiServer {
     return parsed;
   }
 
+  private async transcribeWithLocalWhisper(audio: Buffer, contentType: string): Promise<string> {
+    const extensions = new Map<string, string>([
+      ['audio/mp4', '.m4a'],
+      ['audio/m4a', '.m4a'],
+      ['audio/aac', '.aac'],
+      ['audio/mpeg', '.mp3'],
+      ['audio/wav', '.wav'],
+      ['audio/x-wav', '.wav'],
+      ['audio/webm', '.webm'],
+    ]);
+    const extension = extensions.get(contentType.toLowerCase());
+    if (!extension) {
+      throw new ConflictError('暂不支持这种语音格式，请用手机重新录音。');
+    }
+
+    const model = this.options.config.whisperModel;
+    let directory: string | null = null;
+    try {
+      directory = await mkdtemp(`${tmpdir()}${nodePath.sep}asb-voice-`);
+      const audioPath = `${directory}/voice${extension}`;
+      await writeFile(audioPath, audio, { mode: 0o600 });
+      const transcript = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          this.options.config.whisperBin,
+          [
+            '-m', model,
+            '-f', audioPath,
+            '-l', 'zh',
+            '-nt',
+            '--prompt', '以下是普通话简体中文工作指令：',
+          ],
+          { stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        const stdout: Buffer[] = [];
+        const stderr: Buffer[] = [];
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          reject(new ConflictError('语音识别超时，请说短一点再试。'));
+        }, this.options.config.whisperTimeoutMs);
+
+        child.stdout?.on('data', (chunk: Buffer) => {
+          stdout.push(chunk);
+          if (Buffer.concat(stdout).byteLength > 128 * 1024) child.kill('SIGKILL');
+        });
+        child.stderr?.on('data', (chunk: Buffer) => {
+          stderr.push(chunk);
+          if (Buffer.concat(stderr).byteLength > 256 * 1024) child.kill('SIGKILL');
+        });
+        child.once('error', (error) => {
+          clearTimeout(timer);
+          reject(new ConflictError(`语音识别程序不可用：${error.message}`));
+        });
+        child.once('close', (code, signal) => {
+          clearTimeout(timer);
+          if (code === 0) {
+            const text = Buffer.concat(stdout).toString('utf8').split(/\r?\n/u)
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .join('');
+            resolve(text);
+            return;
+          }
+          if (signal === 'SIGKILL' && Buffer.concat(stdout).byteLength < 128 * 1024) {
+            reject(new ConflictError('语音内容太长，请分段对管家说。'));
+            return;
+          }
+          const detail = Buffer.concat(stderr).toString('utf8').split(/\r?\n/u).at(-2) ?? '';
+          reject(new ConflictError(detail || `语音识别程序退出（${code ?? signal}）`));
+        });
+      });
+      return transcript.trim();
+    } finally {
+      if (directory) await rm(directory, { force: true, recursive: true });
+    }
+  }
+
   private sendJson(response: ServerResponse, statusCode: number, payload: JsonValue): void {
     response.statusCode = statusCode;
     response.setHeader('Cache-Control', 'no-store');
@@ -1012,14 +1302,18 @@ function isLoopbackHostname(hostname: string): boolean {
   );
 }
 
-function getOptionalString(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
+	function getOptionalString(value: unknown): string | null {
+		if (typeof value !== 'string') {
+			return null;
+		}
 
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
+		const trimmed = value.trim();
+		return trimmed ? trimmed : null;
+	}
+
+	function getOptionalNumber(value: unknown): number | null {
+		return typeof value === 'number' && Number.isFinite(value) ? value : null;
+	}
 
 function getOptionalStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
@@ -1236,6 +1530,14 @@ function requireString(value: unknown, field: string): string {
   }
 
   return value.trim();
+}
+
+function requirePositiveInteger(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new DomainError(`Field "${field}" must be a positive integer`);
+  }
+
+  return value;
 }
 
 function formatSseEvent(event: RealtimeSessionEvent): string {

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import { isIP } from 'node:net';
 
 import { z } from 'zod';
@@ -57,6 +58,9 @@ const envSchema = z.object({
   ASB_FEISHU_GROUP_PREFIX: z.string().optional(),
   ASB_FEISHU_NOTIFY_CHAT_IDS: z.string().optional(),
   ASB_FEISHU_REPLY_IN_THREAD: booleanFromEnv(true).default(true),
+  ASB_FRPC_BIN: z.string().optional(),
+  ASB_FRP_DOWNLOAD_BASE: z.string().default('https://github.com/fatedier/frp/releases/download'),
+  ASB_FRP_VERSION: z.string().default('0.61.1'),
   ASB_GEMINI_BIN: z.string().default('gemini'),
   ASB_HUB_SESSION_NAME: z.string().min(1).default('codex-hub'),
   ASB_HTTP_HOST: z.string().default('127.0.0.1'),
@@ -70,6 +74,10 @@ const envSchema = z.object({
   ASB_SUPERVISOR_ENABLED: booleanFromEnv(true).default(true),
   ASB_SUPERVISOR_INTERVAL_MS: z.coerce.number().int().positive().default(15000),
   ASB_SUPERVISOR_TAIL_LINES: z.coerce.number().int().positive().default(80),
+  ASB_VOICE_ENGINE: z.enum(['local-whisper']).default('local-whisper'),
+  ASB_WHISPER_BIN: z.string().default('whisper-cli'),
+  ASB_WHISPER_MODEL: z.string().optional(),
+  ASB_WHISPER_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
 });
 
 export type AppConfig = {
@@ -90,6 +98,9 @@ export type AppConfig = {
   feishuGroupPrefix: string | null;
   feishuNotifyChatIds: string[];
   feishuReplyInThread: boolean;
+  frpcBin: string | null;
+  frpDownloadBase: string;
+  frpVersion: string;
   geminiBin: string;
   hubSessionName: string;
   httpHost: string;
@@ -101,6 +112,10 @@ export type AppConfig = {
   supervisorEnabled: boolean;
   supervisorIntervalMs: number;
   supervisorTailLines: number;
+  voiceEngine: 'local-whisper';
+  whisperBin: string;
+  whisperModel: string;
+  whisperTimeoutMs: number;
 };
 
 export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
@@ -146,6 +161,12 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
   const serverManagerConfigPath = path.isAbsolute(parsed.ASB_SERVER_MANAGER_CONFIG)
     ? parsed.ASB_SERVER_MANAGER_CONFIG
     : path.join(serverManagerPath, parsed.ASB_SERVER_MANAGER_CONFIG);
+  const whisperModelSetting = parsed.ASB_WHISPER_MODEL
+    ? parsed.ASB_WHISPER_MODEL.startsWith(`~${path.sep}`)
+      ? path.join(os.homedir(), parsed.ASB_WHISPER_MODEL.slice(2))
+      : parsed.ASB_WHISPER_MODEL
+    : path.join(os.homedir(), '.cache', 'whisper.cpp', 'ggml-base.bin');
+  const whisperModel = path.resolve(whisperModelSetting);
   const dbPath = parsed.ASB_DB_PATH
     ? path.resolve(parsed.ASB_DB_PATH)
     : path.join(dataDir, 'agent-session-bridge.sqlite');
@@ -172,6 +193,9 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
       : null,
     feishuNotifyChatIds: splitList(parsed.ASB_FEISHU_NOTIFY_CHAT_IDS),
     feishuReplyInThread: parsed.ASB_FEISHU_REPLY_IN_THREAD,
+    frpcBin: parsed.ASB_FRPC_BIN?.trim() ? parsed.ASB_FRPC_BIN.trim() : null,
+    frpDownloadBase: parsed.ASB_FRP_DOWNLOAD_BASE.replace(/\/$/u, ''),
+    frpVersion: parsed.ASB_FRP_VERSION.replace(/^v/u, ''),
     geminiBin: parsed.ASB_GEMINI_BIN,
     hubSessionName: parsed.ASB_HUB_SESSION_NAME,
     httpHost: parsed.ASB_HTTP_HOST,
@@ -183,6 +207,10 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
     supervisorEnabled: parsed.ASB_SUPERVISOR_ENABLED,
     supervisorIntervalMs: parsed.ASB_SUPERVISOR_INTERVAL_MS,
     supervisorTailLines: parsed.ASB_SUPERVISOR_TAIL_LINES,
+    voiceEngine: parsed.ASB_VOICE_ENGINE,
+    whisperBin: parsed.ASB_WHISPER_BIN.trim(),
+    whisperModel,
+    whisperTimeoutMs: parsed.ASB_WHISPER_TIMEOUT_MS,
   };
 }
 
