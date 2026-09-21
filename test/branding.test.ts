@@ -4,17 +4,31 @@ import path from 'node:path';
 import test from 'node:test';
 
 test('uses agentBridge as the public product name', async () => {
-  const [readme, index, manifestSource, packageSource, androidManifest] = await Promise.all([
-    readFile(path.join(process.cwd(), 'README.md'), 'utf8'),
-    readFile(path.join(process.cwd(), 'public', 'index.html'), 'utf8'),
-    readFile(path.join(process.cwd(), 'public', 'manifest.webmanifest'), 'utf8'),
-    readFile(path.join(process.cwd(), 'package.json'), 'utf8'),
-    readFile(
-      path.join(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
-      'utf8',
-    ),
-  ]);
-  const publicCopy = `${readme}\n${index}\n${manifestSource}\n${androidManifest}`;
+  const [readme, index, studio, phone, manifestSource, packageSource, androidManifest] =
+    await Promise.all([
+      readFile(path.join(process.cwd(), 'README.md'), 'utf8'),
+      readFile(path.join(process.cwd(), 'public', 'index.html'), 'utf8'),
+      readFile(path.join(process.cwd(), 'public', 'studio.html'), 'utf8'),
+      // The Android shell renders this one in a WebView, so its copy is public too.
+      readFile(
+        path.join(process.cwd(), 'android', 'app', 'src', 'main', 'assets', 'phone.html'),
+        'utf8',
+      ),
+      readFile(path.join(process.cwd(), 'public', 'manifest.webmanifest'), 'utf8'),
+      readFile(path.join(process.cwd(), 'package.json'), 'utf8'),
+      readFile(
+        path.join(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
+        'utf8',
+      ),
+    ]);
+  const publicCopy = [
+    readme,
+    index,
+    studio,
+    phone,
+    manifestSource,
+    androidManifest,
+  ].join('\n');
 
   assert.match(readme, /^# agentBridge$/mu);
   assert.match(index, />agentBridge</u);
@@ -22,8 +36,13 @@ test('uses agentBridge as the public product name', async () => {
   // spaced "Agent Bridge" and PascalCase "AgentBridge" spellings before.
   assert.doesNotMatch(
     publicCopy,
-    /AI Butler|HAPI 风格|统一 AI 管家|獭维实验室|Agent Bridge|AgentBridge/u,
+    /AI Butler|HAPI 风格|统一 AI 管家|獭维实验室|Agent Bridge|AgentBridge|AgentSessionBridge/u,
   );
+  // The original hyphenated name reached visible copy too, most recently as the
+  // "AGENT SESSION BRIDGE / CONTROL" eyebrow on the console. Checked separately
+  // and case-insensitively so the all-caps form is covered, but the lowercase
+  // "agentbridge" from the clone URL stays legitimate and must not trip this.
+  assert.doesNotMatch(publicCopy, /agent[ -]session[ -]bridge/iu);
 
   // The launcher label is what the phone shows, so it is public copy too.
   assert.match(androidManifest, /android:label="agentBridge"/u);
