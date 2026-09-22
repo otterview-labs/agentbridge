@@ -35,12 +35,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up the Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-        with:
-          # Pinned to the same versions as android/app/build.gradle rather than
-          # letting AGP fetch whatever it likes on first run.
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - name: Check the runner's Android SDK covers what the build pins
+        # The ubuntu runner image already ships android-35 and build-tools
+        # 35.0.0 — exactly what android/app/build.gradle pins — with the
+        # licences accepted, so there is no setup action to install and no
+        # third-party action to trust here. Asserted rather than assumed: if a
+        # future image drops either, this fails with a clear message instead of
+        # surfacing later as an opaque AGP resolution error.
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -d "$sdk/platforms/android-35" \
+            || { echo "::error::android-35 is missing from $sdk"; exit 1; }
+          test -d "$sdk/build-tools/35.0.0" \
+            || { echo "::error::build-tools 35.0.0 is missing from $sdk"; exit 1; }
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$sdk"
 
       - name: Pin Gradle to the upstream distribution host
         # android/gradle/wrapper/gradle-wrapper.properties points at a Tencent
@@ -84,7 +94,10 @@ jobs:
           set -euo pipefail
           apk=android/app/build/outputs/apk/release/app-release.apk
           test -f "$apk" || { echo "::error::expected $apk to exist"; exit 1; }
-          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          # The version the build pinned, not simply the newest on the image:
+          # inspecting an APK with different tooling than produced it is how you
+          # get a verification result nobody can reproduce.
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
           "$build_tools/apksigner" verify --print-certs -v "$apk"
           badging=$("$build_tools/aapt2" dump badging "$apk")
           echo "$badging" | head -5
