@@ -19,7 +19,7 @@ agentBridge 是一个自托管的 AI 编程助手控制台。它把本机与远�
 | --- | --- | --- |
 | 控制台 | `/` | 操作：会话、任务、审批、机器、终端、公网部署 |
 | 小镇工作室 | `/studio` | 日常：管家对话、像素办公室、日报、记忆 |
-| Android 应用 | APK | 移动：手机直连远程机器，也可连 Hub 共用工作室 |
+| Android 应用 | [下载 APK](https://otterview-labs.github.io/agentbridge/) | 移动：手机直连远程机器，也可连 Hub 共用工作室 |
 
 此外还有 CLI、HTTP API 和飞书三个程序化入口。工作室与控制台共用同一个 Hub 和同一个 API Token，不是两套数据；Android 连接 Hub 后读写的是同一份对话、记忆和日报，断网时退回本机记录。
 
@@ -67,7 +67,7 @@ Pi 模型配置方法与数据边界见 [`docs/pi-studio.md`](docs/pi-studio.md)
 - 可选飞书长连接、主动通知、浏览器通知和 PWA 安装
 - Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，对方机器不需要装本项目的任何东西；它也可以连接 Hub，共用同一套工作室对话、记忆与日报
 
-Android WebView 壳与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
+Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbridge/)取用，无需自行构建；WebView 壳、签名与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
 
 ### 当前状态
 

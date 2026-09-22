@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agentBridge — Android 应用下载</title>
+<meta name="description" content="agentBridge 是一个自托管的 AI 编程助手控制台。下载 Android 应用，直接在手机上发现并回复远程机器上的 Claude Code / Codex 会话。">
+<link rel="icon" href="icon.png">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f8f7ef;--paper:#fffef9;--ink:#283f34;--muted:#657365;
+  --line:#dce2d5;--green:#38674c;--soft:#e9efdf;--warn:#865a23;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:0;color:var(--ink);
+  background:radial-gradient(ellipse at top,#eef1e3,transparent 70%),#e8ebdf;
+  font:15px/1.75 "PingFang SC","Microsoft YaHei",sans-serif;
+}
+a{color:var(--green)}
+.wrap{max-width:760px;margin:0 auto;padding:56px 22px 72px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+.mark{
+  height:46px;width:46px;display:grid;place-items:center;flex:none;
+  font:32px/1 Georgia,serif;background:var(--green);color:var(--paper);border-radius:12px;
+}
+header strong{display:block;font-size:20px;letter-spacing:.04em}
+header small{display:block;font:11px/1.6 Georgia,serif;letter-spacing:.14em;color:var(--muted)}
+h1{font-size:clamp(25px,4.4vw,34px);line-height:1.35;letter-spacing:-.03em;margin:0 0 12px;font-weight:600}
+h2{font-size:17px;margin:38px 0 12px;letter-spacing:-.01em}
+.lede{font-size:16px;color:var(--muted);margin:0 0 30px;max-width:56ch}
+.card{
+  background:var(--paper);border:1px solid var(--line);border-radius:16px;
+  padding:26px;box-shadow:0 1px 2px rgba(40,63,52,.05),0 12px 30px -18px rgba(40,63,52,.28);
+}
+.download{
+  display:inline-flex;align-items:center;gap:10px;
+  background:var(--green);color:var(--paper);text-decoration:none;
+  border-radius:11px;padding:15px 26px;font-size:16px;font-weight:600;
+  letter-spacing:.01em;min-height:48px;
+}
+.download:hover{background:#2f5a41}
+.download:focus-visible{outline:3px solid #ae8a48;outline-offset:3px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+.note{
+  margin:18px 0 0;padding:12px 15px;background:var(--soft);
+  border-radius:9px;font-size:13px;color:var(--muted);
+}
+ul{padding-left:20px;margin:10px 0}
+li{margin:9px 0}
+.shots{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap}
+.shots img{
+  width:186px;flex:none;border:1px solid var(--line);border-radius:12px;
+  background:var(--paper);
+}
+ol{padding-left:20px;margin:10px 0}
+footer{
+  margin-top:52px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px;
+}
+code{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:2px 6px;border-radius:5px}
+@media (max-width:520px){.wrap{padding:36px 16px 56px}.card{padding:20px}.shots img{width:calc(50% - 8px)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="mark" aria-hidden="true">P</span>
+    <span>
+      <strong>agentBridge</strong>
+      <small>SELF-HOSTED AGENT CONSOLE</small>
+    </span>
+  </header>
+
+  <h1>把手机变成一个终端遥控器</h1>
+  <p class="lede">
+    agentBridge 是一个自托管的 AI 编程助手控制台。Android 应用可以直连你自己的远程机器，
+    发现并回复上面跑着的 Claude Code / Codex 会话 —— 那些机器不需要安装本项目。
+  </p>
+
+  <div class="card">
+    <a class="download"
+       href="https://github.com/otterview-labs/agentbridge/releases/latest/download/agentbridge.apk">
+      下载 Android 应用
+    </a>
+    <div class="meta">
+      <span>版本 <b id="release-version">最新版</b></span>
+      <span>要求 <b>Android 7.0 及以上</b></span>
+      <span>约 <b>300 KB</b></span>
+      <span>许可 <b>Apache-2.0</b></span>
+    </div>
+    <p class="note">
+      首次安装需要允许「安装未知来源应用」。这个 APK 由本仓库的 CI 构建并用固定的发布密钥签名，
+      源码、构建脚本和签名流程都在仓库里，可自行核对或自行构建。
+    </p>
+  </div>
+
+  <h2>装上之后能做什么</h2>
+  <ul>
+    <li><b>直连远程机器</b> — 经 SSH 发现机器上的 Claude Code / Codex 会话，查看输出、回复输入；对方机器不需要装 agentBridge。</li>
+    <li><b>或者连上 Hub</b> — 如果你已经在跑 agentBridge 服务，手机可以连上去，共用同一套小镇工作室的对话、记忆与日报，断网时退回本机记录。</li>
+    <li><b>语音输入</b> — 手机没有系统识别器时，会把短录音上传到 Hub，用本地 <code>whisper-cli</code> 转写，转写完即删，不发往第三方云。</li>
+  </ul>
+
+  <h2>界面</h2>
+  <div class="shots">
+    <img src="android-local.png" alt="Android 应用：本机记录" width="186">
+    <img src="android-report.png" alt="Android 应用：管家日报" width="186">
+  </div>
+
+  <h2>安装</h2>
+  <ol>
+    <li>点上面的按钮下载 <code>agentbridge.apk</code>。</li>
+    <li>在系统提示或「设置 → 应用 → 特殊应用权限」里允许安装未知来源应用。</li>
+    <li>打开应用，用「发现机器」扫描局域网，或手动填 SSH 地址、账号与密码 / 私钥。</li>
+  </ol>
+
+  <footer>
+    <a href="https://github.com/otterview-labs/agentbridge">源码仓库</a>
+    <a href="https://github.com/otterview-labs/agentbridge/blob/main/docs/android-app.md">Android 文档</a>
+    <a href="https://github.com/otterview-labs/agentbridge/releases">全部版本</a>
+    <a href="https://github.com/otterview-labs/agentbridge/blob/main/SECURITY.md">安全策略</a>
+  </footer>
+
+</div>
+<script>
+  // Best effort only: the download button already points at /releases/latest,
+  // so the page stays correct if this never resolves.
+  fetch('https://api.github.com/repos/otterview-labs/agentbridge/releases/latest')
+    .then(function (response) { return response.ok ? response.json() : Promise.reject(new Error()); })
+    .then(function (release) {
+      var tag = String(release.tag_name || '').replace(/^android-v/, '').replace(/^v/, '');
+      if (tag) document.getElementById('release-version').textContent = 'v' + tag;
+    })
+    .catch(function () {});
+</script>
+</body>
+</html>

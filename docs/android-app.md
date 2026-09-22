@@ -208,6 +208,42 @@ The output is:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Release
+
+The published APK is at
+<https://github.com/otterview-labs/agentbridge/releases/latest/download/agentbridge.apk>,
+linked from the download page at <https://otterview-labs.github.io/agentbridge/>.
+Both are stable permalinks: the release URL always resolves to the newest
+release, so neither has to be updated when a version ships. `site/index.html`
+holds the page and `.github/workflows/pages.yml` publishes it.
+
+Pushing a tag matching `android-v*` makes
+`.github/workflows/android-release.yml` build, sign, verify, and publish the
+APK as `agentbridge.apk`. `workflow_dispatch` builds an existing tag again.
+The same tag is what makes `/releases/latest` resolve to this release, so do
+not publish a newer non-Android release without checking the download page.
+
+Signing material is supplied out of band in two equivalent ways, both read by
+`android/app/build.gradle`:
+
+- `android/keystore.properties` (gitignored) for local builds —
+  `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
+- `ASB_ANDROID_STORE_FILE`, `ASB_ANDROID_STORE_PASSWORD`,
+  `ASB_ANDROID_KEY_ALIAS`, `ASB_ANDROID_KEY_PASSWORD` in CI, with the keystore
+  itself in the `ASB_ANDROID_KEYSTORE_BASE64` secret.
+
+A checkout with neither still compiles; `assembleRelease` then just emits an
+unsigned APK. CI therefore verifies the signature explicitly rather than
+trusting the build to have succeeded, and also rejects a debuggable artifact —
+a debuggable build stores SSH credentials where any process on the device can
+read them.
+
+> [!IMPORTANT]
+> Back up the release keystore and its passwords somewhere outside this
+> repository. Android only allows an update to be installed over an existing
+> app when both are signed with the same key, so losing it means no future
+> build can update a copy already on a phone.
+
 ## UI regression tests
 
 Run with Node.js and Playwright (including its Chromium browser) available:

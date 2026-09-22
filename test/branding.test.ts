@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 test('uses agentBridge as the public product name', async () => {
-  const [readme, index, studio, phone, manifestSource, packageSource, androidManifest] =
+  const [readme, index, studio, phone, manifestSource, packageSource, androidManifest, site] =
     await Promise.all([
       readFile(path.join(process.cwd(), 'README.md'), 'utf8'),
       readFile(path.join(process.cwd(), 'public', 'index.html'), 'utf8'),
@@ -20,6 +20,8 @@ test('uses agentBridge as the public product name', async () => {
         path.join(process.cwd(), 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),
         'utf8',
       ),
+      // Published on GitHub Pages, so it is the most public copy of all.
+      readFile(path.join(process.cwd(), 'site', 'index.html'), 'utf8'),
     ]);
   const publicCopy = [
     readme,
@@ -28,6 +30,7 @@ test('uses agentBridge as the public product name', async () => {
     phone,
     manifestSource,
     androidManifest,
+    site,
   ].join('\n');
 
   assert.match(readme, /^# agentBridge$/mu);
@@ -53,4 +56,13 @@ test('uses agentBridge as the public product name', async () => {
 
   const packageMetadata = JSON.parse(packageSource) as { name?: unknown };
   assert.equal(packageMetadata.name, 'agentbridge');
+
+  // The download page is the one link a visitor is meant to follow, and it only
+  // survives a release if it is the /releases/latest permalink: a versioned
+  // asset URL would 404 the moment the next release ships. The asset name is
+  // fixed by the release workflow, so all three have to agree.
+  assert.match(
+    site,
+    /href="https:\/\/github\.com\/otterview-labs\/agentbridge\/releases\/latest\/download\/agentbridge\.apk"/u,
+  );
 });
