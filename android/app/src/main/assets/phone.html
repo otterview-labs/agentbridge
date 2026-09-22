@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>agentBridge</title>
+  <link rel="stylesheet" href="./phone.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div>
+      <div class="brandIdentity">
+        <span class="brandMascot" id="brandMascot" aria-hidden="true"></span>
+        <h1>办公小镇</h1>
+      </div>
+    </div>
+    <div class="topActions">
+      <button class="cloudState" id="cloudState" type="button">未连接</button>
+      <button class="iconButton" id="refreshAll" title="刷新">⟳</button>
+    </div>
+  </header>
+
+  <section class="summary" id="summary">
+    <div class="summaryMain">
+      <strong id="taskCount">0 位员工</strong>
+      <button id="attentionCount" type="button" disabled title="查看待输入任务">0 个待输入</button>
+    </div>
+    <p id="networkLine">正在读取本机网段…</p>
+  </section>
+
+  <nav class="tabs" aria-label="视图">
+    <button class="tab" data-view="butler" aria-pressed="false">管家</button>
+    <button class="tab active" data-view="offices" aria-pressed="true">办公室</button>
+    <button class="tab" data-view="todo" id="todoTab" aria-pressed="false">待输入</button>
+    <button class="tab" data-view="public" aria-pressed="false">公网</button>
+  </nav>
+
+  <main id="main">
+    <section id="butler" class="view hidden">
+      <article class="butlerHero">
+        <header class="butlerHeroHeader">
+          <div>
+            <p class="eyebrow">管家</p>
+            <h2 id="piSheetTitle">管家</h2>
+            <p id="piMeta">模型未连接</p>
+          </div>
+          <div class="officeActions">
+            <button class="smallAction dark" type="button" id="openCloudFromButler">连接模型</button>
+            <button class="smallAction" type="button" id="refreshButler">刷新</button>
+          </div>
+        </header>
+        <div class="butlerHeroBody">
+          <span class="employeeStage" id="piAvatar" aria-hidden="true"></span>
+          <div class="butlerAdvice">
+            <strong id="butlerEmployeeName">正在读取待输入</strong>
+            <p id="butlerEmployeeSub">连接模型后生成今日建议。</p>
+            <span class="stateChip attention">管家建议</span>
+          </div>
+        </div>
+      </article>
+
+      <section class="butlerSection aiSummarySection">
+        <header>
+          <div>
+            <h3>今日与明日</h3>
+            <small id="butlerReportMeta">AI 总结</small>
+          </div>
+          <div class="planModeToggle" role="group" aria-label="今日与明日视图">
+            <button type="button" data-plan-mode="ai" class="active">AI 总结</button>
+            <button type="button" data-plan-mode="records">原始记录</button>
+          </div>
+        </header>
+        <button class="smallAction dark reportRefresh" id="generateReport" type="button">重新生成日报</button>
+        <p class="aiSummary" id="butlerAiSummary">尚未生成今日总结。</p>
+        <div class="dayGroup" aria-label="今日">
+          <span>今日</span>
+          <div id="piToday" class="plainList"></div>
+        </div>
+        <div class="dayGroup tomorrow" aria-label="明日">
+          <span>明日</span>
+          <div id="piTomorrow" class="plainList"></div>
+        </div>
+      </section>
+
+      <section class="butlerSection">
+        <header><h3>需要确认</h3><small>等待你输入</small></header>
+        <div id="piAttention" class="plainList"></div>
+      </section>
+
+      <section class="butlerSection">
+        <header><h3>对话</h3><small id="butlerMessageLabel">未连接</small></header>
+        <div id="piMessages" class="piMessages"></div>
+      </section>
+
+    </section>
+    <section id="offices" class="view"></section>
+    <section id="todo" class="view hidden"></section>
+    <section id="public" class="view hidden"></section>
+  </main>
+
+  <footer class="bottomBar safe">
+    <button class="ghostAction" id="openScan">发现机器</button>
+    <button class="primaryAction" id="openAdd">添加 SSH</button>
+  </footer>
+</div>
+
+<div class="sheetBackdrop hidden" id="machineBackdrop">
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="machineSheetTitle">
+    <header>
+      <div>
+        <p class="eyebrow">MACHINE</p>
+        <h2 id="machineSheetTitle">添加 SSH 机器</h2>
+      </div>
+      <button class="iconButton subtle" data-close="machineBackdrop" aria-label="关闭机器设置">✕</button>
+    </header>
+    <div id="scanBlock" class="scanBlock">
+      <label>局域网网段</label>
+      <div class="inline">
+        <input id="scanPrefix" placeholder="192.168.1" inputmode="decimal">
+        <button class="smallAction" id="runScan">扫描</button>
+      </div>
+      <div id="scanResult" class="scanResult"></div>
+    </div>
+    <form id="machineForm">
+      <input type="hidden" id="machineId">
+      <label>办公室名称<input id="machineName" placeholder="Mac Pro" required></label>
+      <label>SSH 地址<input id="machineHost" placeholder="192.168.1.8" required></label>
+      <div class="two">
+        <label>用户<input id="machineUsername" placeholder="root" required></label>
+        <label>端口<input id="machinePort" inputmode="numeric" value="22"></label>
+      </div>
+      <div class="authRow">
+        <button type="button" class="chip active" data-auth="password">密码</button>
+        <button type="button" class="chip" data-auth="key">私钥</button>
+      </div>
+      <label id="passwordLabel">SSH 密码<input id="machinePassword" type="password" autocomplete="off"></label>
+      <label id="keyLabel" class="hidden">私钥内容<textarea id="machineKey" rows="6" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea></label>
+      <p class="formNote">凭据只保存在这台手机的应用私有存储；首次连接会记录机器指纹，指纹变化会拒绝连接。</p>
+      <button class="primaryAction wide" type="submit">保存办公室</button>
+    </form>
+  </section>
+</div>
+
+<div class="sheetBackdrop hidden" id="frpBackdrop">
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="frpSheetTitle">
+    <header>
+      <div>
+        <p class="eyebrow">PUBLIC ENTRY · FRP</p>
+        <h2 id="frpSheetTitle">公网安全入口</h2>
+      </div>
+      <button class="iconButton subtle" data-close="frpBackdrop" aria-label="关闭公网设置">✕</button>
+    </header>
+    <form id="frpForm">
+      <input type="hidden" id="frpMachineId">
+      <p class="simpleHint">日常使用只需要填这三项。App 会优先复用服务器上已有 FRP；没有可用服务时才自动部署。</p>
+      <label>公网服务器 IP / 域名<input id="frpHost" placeholder="1.2.3.4" required></label>
+      <label>SSH 用户<input id="frpUsername" placeholder="root" required></label>
+      <label id="frpPasswordLabel">SSH 密码<input id="frpPassword" type="password" autocomplete="off"></label>
+      <button class="primaryAction wide" type="submit">保存并自动部署</button>
+
+      <details class="advancedDetails" id="frpAdvanced">
+        <summary>高级配置</summary>
+        <div class="advancedBody">
+          <label>入口名称<input id="frpName" placeholder="云端入口"></label>
+          <div class="two">
+            <label>SSH 端口<input id="frpPort" inputmode="numeric" value="22"></label>
+            <label>FRP 端口（自动避让）<input id="frpBindPort" inputmode="numeric" value="7001"></label>
+          </div>
+          <label>FRP 公网地址<input id="frpPublicAddress" placeholder="默认使用服务器 IP"></label>
+          <div class="two">
+            <label>FRP 版本<input id="frpVersion" value="0.61.1"></label>
+            <label>下载源<input id="frpDownloadBase" value="https://github.com/fatedier/frp/releases/download"></label>
+          </div>
+          <label>已有 FRP Token<input id="frpExistingToken" type="password" autocomplete="off" placeholder="通常可自动识别"></label>
+          <p class="formNote">私钥登录、非 22 SSH 端口、自建 FRP 下载源都在这里调整。</p>
+        </div>
+      <div class="authRow">
+        <button type="button" class="chip active" data-frp-auth="password">密码</button>
+        <button type="button" class="chip" data-frp-auth="key">私钥</button>
+      </div>
+      <label id="frpKeyLabel" class="hidden">私钥内容<textarea id="frpKey" rows="6" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea></label>
+      </details>
+      <p class="formNote">安全模式：目标机器不直接暴露 SSH 端口。每台机器使用 FRP STCP 加密隧道；visitor 只绑定在公网入口本机，手机必须先 SSH 登录入口后才能访问。FRP token 与每个隧道 secret 只保存在手机私有存储。</p>
+    </form>
+  </section>
+</div>
+
+<div class="sheetBackdrop hidden" id="taskBackdrop">
+  <section class="sheet taskSheet" role="dialog" aria-modal="true" aria-labelledby="taskTitle">
+    <header>
+      <div class="employeeHeader">
+        <div class="avatar" id="taskAvatar">👤</div>
+        <div>
+          <p class="eyebrow" id="taskMeta">TASK</p>
+          <h2 id="taskTitle">任务</h2>
+        </div>
+      </div>
+      <button class="iconButton subtle" data-close="taskBackdrop" aria-label="关闭任务详情">✕</button>
+    </header>
+    <div class="taskStatusLine" id="taskStatusLine"></div>
+    <div class="taskBody">
+      <p class="taskNeed hidden" id="taskNeed"></p>
+      <section class="workSummary" id="workSummary"></section>
+      <pre class="output" id="taskOutput"></pre>
+      <label class="replyLabel">回复此会话<textarea id="replyText" rows="4" placeholder="写下指令或需要补充的信息"></textarea></label>
+      <div class="taskActions">
+        <button class="ghostAction" id="renameTask">改名</button>
+        <button class="ghostAction" id="tailTask">刷新输出</button>
+        <button class="primaryAction" id="sendTask">发送 →</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="sheetBackdrop hidden" id="cloudBackdrop">
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="cloudSheetTitle">
+    <header>
+      <div>
+        <p class="eyebrow">管家 · 云端</p>
+        <h2 id="cloudSheetTitle">云端与模型</h2>
+      </div>
+      <button class="iconButton subtle" data-close="cloudBackdrop" aria-label="关闭云端设置">✕</button>
+    </header>
+    <form id="cloudForm">
+      <label>Hub 地址<input id="cloudUrl" type="url" placeholder="https://hub.example.com" required></label>
+      <label>Hub Token<input id="cloudToken" type="password" autocomplete="off" placeholder="已连接时可留空"></label>
+      <label class="checkRow"><input id="cloudShare" type="checkbox" checked>同步这台手机的任务记录</label>
+      <label class="checkRow"><input id="cloudHttp" type="checkbox">允许局域网 HTTP</label>
+      <div class="modelFields">
+        <p class="formNote">管家模型 · OpenAI 格式</p>
+        <label>Base URL<input id="modelBaseUrl" type="url" placeholder="https://api.example.com/v1"></label>
+        <label>Model<input id="modelId" placeholder="glm-4.6 / gpt-4o-mini / qwen-max"></label>
+        <label>API Key<input id="modelApiKey" type="password" autocomplete="off" placeholder="已保存时可不填"></label>
+      </div>
+      <p class="formNote">Hub Token 保存在手机 Android Keystore；模型密钥由 Hub 加密保存，不会出现在页面状态里。</p>
+      <button class="primaryAction wide" type="submit">连接云端与模型</button>
+      <button class="ghostAction wide" type="button" id="disconnectCloud">断开连接</button>
+    </form>
+  </section>
+</div>
+
+<div class="butlerChatDock safe hidden" id="butlerChatDock">
+  <div class="voicePanel hidden" id="voicePanel" aria-live="polite">
+    <div class="voiceWave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+    <div>
+      <strong id="voicePanelTitle">正在听…</strong>
+      <small id="voicePanelHint">松开后转文字并发送 · 上滑取消</small>
+    </div>
+  </div>
+  <div class="chatQuickRow" aria-label="快捷提问">
+    <button type="button" data-quick-prompt="今天最应该先处理哪件事？">今天先处理哪件？</button>
+    <button type="button" data-quick-prompt="请总结今日进展和风险。">总结今日进展</button>
+    <button type="button" data-quick-prompt="帮我安排明天的优先级。">安排明日</button>
+  </div>
+  <div class="chatInputRow">
+    <button class="voiceButton" id="voiceButton" type="button" aria-label="按住说话，也可以轻点开始或结束">🎤</button>
+    <label class="sr-only" for="piInput">问管家安排</label>
+    <textarea id="piInput" rows="1" placeholder="问管家，或按住麦克风说话"></textarea>
+    <button class="sendButton" id="sendPi" type="button" aria-label="发送">↑</button>
+  </div>
+  <div class="voiceOptions">
+    <button type="button" id="voiceAutoSend" class="active" aria-pressed="true">说完自动发送</button>
+    <button type="button" id="voiceSpeakReply" class="active" aria-pressed="true">语音播报</button>
+    <span id="voiceStateText">点击麦克风开始说话</span>
+  </div>
+</div>
+
+<div class="busy hidden" id="busy">
+  <div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+  <p id="busyText">正在连接机器…</p>
+  <p class="busyNetwork" id="busyNetwork"></p>
+  <p class="busyElapsed" id="busyElapsed"></p>
+</div>
+<div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+<script src="./phone.js"></script>
+</body>
+</html>

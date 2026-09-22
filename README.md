@@ -1,21 +1,73 @@
-# Agent Session Bridge
+# agentBridge
 
-Agent Session Bridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 与 Gemini CLI 会话，并提供 Web UI、CLI、HTTP API 和可选的飞书入口。会话与消息状态保存在本地 SQLite 数据库中。
+<p align="center">
+  <img src="docs/screenshots/icon.png" width="96" alt="agentBridge 吉祥物图标">
+</p>
+
+agentBridge 是一个自托管的 AI 编程助手控制台。它把本机与远程机器上的 Codex、Claude Code 和 Gemini CLI 会话收拢到一处，用「任务 + 人工验收」管理它们的产出，并可选地通过公网中转把内网机器接进来。
+
+会话本身跑在本机 `tmux` 里，会话与消息状态保存在本地 SQLite，不依赖任何托管服务。对远程机器，agentBridge 复用你已有的密钥登录做发现和观察；需要跨网络时用 FRP 打一条隧道，而不是把 SSH 端口暴露到公网——这条路径会在你选定的机器上安装 `frpc`（云端入口则安装 `frps`），SSH 发现本身不装任何东西。
+
+它不替你执行。任务的派发、验收和停止都要人确认；工具不会从「会话空闲」推断任务完成，也不会自动重试投递。
 
 > [!WARNING]
 > 本项目可以读取工作区文件、向会话发送输入，并执行经过审批的本机命令。默认只监听 `127.0.0.1`。远程使用时必须配置 API Token、允许的 Host 和工作区目录，并通过受信任的 HTTPS 反向代理或 VPN 接入。
 
+## 三个界面
+
+| 入口 | 位置 | 面向 |
+| --- | --- | --- |
+| 控制台 | `/` | 操作：会话、任务、审批、机器、终端、公网部署 |
+| 小镇工作室 | `/studio` | 日常：管家对话、像素办公室、日报、记忆 |
+| Android 应用 | [下载 APK](https://otterview-labs.github.io/agentbridge/) | 移动：手机直连远程机器，也可连 Hub 共用工作室 |
+
+此外还有 CLI、HTTP API 和飞书三个程序化入口。工作室与控制台共用同一个 Hub 和同一个 API Token，不是两套数据；Android 连接 Hub 后读写的是同一份对话、记忆和日报，断网时退回本机记录。
+
 ## 功能
+
+### 会话
 
 - 按工作区创建、切换、重命名和停止会话
 - 使用 `tmux` 保持会话持续运行
 - 支持 Codex、Claude Code 和 Gemini CLI
-- 提供 Web UI、CLI、HTTP API 和 SSE 事件流
 - 保存会话消息、状态与巡检结果
 - 浏览工作区文件，查看 `git status` 和 `git diff`
 - 对停止会话和高风险终端命令执行审批
-- 查看机器、外部服务状态和日志，并提交受控操作
+
+### 任务与指挥中心
+
+- 指挥中心分开展示机器、已检测 AI 工具、执行实例、任务与待处理事项
+- 本机任务支持明确目标、人工下发、规则观察、提交证据与人工验收
+- 任务和时间线保存在 SQLite；远程 Runner 尚未实现，不会将远程登记显示为可执行
+
+任务流程、监督边界及 API 见 [`docs/command-center.md`](docs/command-center.md)。
+
+### 远程机器与公网中转
+
+- 通过 SSH 发现本机以外的 Mac/Linux 机器，读取已安装的 AI CLI 与 `tmux` 窗格
+- 把远端 Claude/Codex/Gemini 窗格导入为可观察的任务，抓取有界输出、发送输入
+- 用 FRP STCP 隧道接入内网机器，而不是为其开放 SSH 端口
+- 可复用已有的 `frps`，也可托管安装一个；`frpc` 校验 SHA-256 后安装
+
+SSH 机器发现与 FRP 公网中转见 [`docs/frp-relay.md`](docs/frp-relay.md)。
+
+### 小镇工作室
+
+- `/studio` 响应式工作室：管家对话、像素办公室、日报与显式记忆
+- 日报由 Pi 分析生成，给出整体结论、今日成果、推进中的工作、阻塞风险、明日优先事项
+- 模型提供商、地址与密钥在页面内配置，密钥以 AES-256-GCM 加密存储
+- 管家支持语音输入；手机没有系统识别器时把短录音上传到 Hub，由本地 `whisper-cli` 转写，转写完即删、不发往第三方云
+- Android 应用复用同一套页面资源
+
+Pi 模型配置方法与数据边界见 [`docs/pi-studio.md`](docs/pi-studio.md)。
+
+### 入口与通知
+
+- 提供 Web UI、CLI、HTTP API 和 SSE 事件流
 - 可选飞书长连接、主动通知、浏览器通知和 PWA 安装
+- Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，对方机器不需要装本项目的任何东西；它也可以连接 Hub，共用同一套工作室对话、记忆与日报
+
+Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbridge/)取用，无需自行构建；WebView 壳、签名与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
 
 ### 当前状态
 
@@ -24,10 +76,43 @@ Agent Session Bridge 使用 `tmux` 在本机创建和管理 Codex、Claude Code 
 | Codex 与本机 `tmux` 会话 | 可用，项目仍处于早期阶段 |
 | Claude Code、Gemini CLI | 实验性 |
 | Web UI、CLI、HTTP API、SSE | 可用，面向单一可信操作者 |
+| 指挥中心任务流 | 可用，仅本机执行 |
+| SSH 机器发现与远程任务 | 实验性，只发现和观察，不在远端创建进程 |
+| FRP 公网中转 | 实验性，第一版只支持一个云端入口 |
+| 小镇工作室与 Pi 日报 | 实验性，Pi 默认关闭 |
 | 飞书入口 | 实验性，必须配置用户或群聊白名单 |
 | 文件浏览、Git 预览、受控终端 | 实验性，高权限功能 |
-| 外部服务器管理 | 可选集成，需要单独安装兼容项目 |
+| Android 应用 | 实验性，当前 0.5.21 |
 | 在远程机器上创建会话 | 尚未实现 |
+| 外部服务器管理 | 可选集成，需要单独安装兼容项目 |
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/studio-web.png" width="680" alt="小镇工作室（桌面浏览器）">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/studio-mobile.png" width="196" alt="小镇工作室（手机浏览器）">
+  <img src="docs/screenshots/android-local.png" width="196" alt="Android 应用：本机记录">
+  <img src="docs/screenshots/android-report.png" width="196" alt="Android 应用：管家日报">
+</p>
+
+<p align="center">
+  <sub>左起：手机浏览器、Android 应用的本机记录与管家日报。</sub>
+</p>
+
+以上为 `/studio`（小镇工作室）：管家对话、像素办公室、日报与显式记忆。桌面与手机浏览器共用同一套页面，Android 应用复用相同资源，也可脱离 Hub 以本机模式独立运行。
+控制台式管理界面（会话、审批、机器与终端）在 `/`。
+
+## Pi 小镇工作室
+
+新增 `/studio`：响应式 Web / 手机工作室，包含管家对话、像素办公室、
+Pi 分析生成的日报 / 明日建议和显式用户记忆。Android 0.5.21 使用同一页面资源，
+支持连接 Hub 共享对话、记忆和日报，并可选择上传本机任务摘要。
+页面内可配置模型提供商、API 地址和加密保存的密钥，原有控制台仍可进入。
+Pi 默认关闭，配置方法与数据边界见
+[Pi 工作室说明](docs/pi-studio.md)。
 
 ## 环境要求
 
@@ -45,8 +130,8 @@ brew install tmux
 ## 快速开始
 
 ```bash
-git clone https://github.com/otterview-labs/agent-session-bridge.git
-cd agent-session-bridge
+git clone https://github.com/otterview-labs/agentbridge.git
+cd agentbridge
 npm ci
 cp .env.example .env
 npm run build
@@ -124,6 +209,12 @@ node dist/cli.js /tail demo
 - `GET /sessions/:name`
 - `GET /sessions/:name/tail`
 - `POST /command`
+- `GET /approvals`
+- `GET /tasks`、`POST /tasks`
+- `GET /machines`、`POST /machines/ssh`、`POST /machines/:id/ssh/discover`
+- `GET /ssh/tasks`
+- `GET /frp/overview`、`POST /frp/servers`、`POST /frp/relays`
+- `GET /studio/state`、`POST /studio/messages`、`GET /studio/reports`
 - `GET /supervisor`
 - `POST /supervisor/run`
 - `GET /events`
@@ -182,10 +273,19 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 | `ASB_DB_PATH` | SQLite 数据库路径 |
 | `ASB_SUPERVISOR_ENABLED` | 是否启用定时巡检 |
 | `ASB_SUPERVISOR_INTERVAL_MS` | 巡检间隔 |
+| `ASB_SSH_HOST_KEY_POLICY` | 远程 SSH 主机密钥策略：`accept-new`（默认，首次连接信任、密钥变更拒绝）或 `strict`（只接受 `known_hosts` 中已有的主机） |
+| `ASB_FRP_DOWNLOAD_BASE` | FRP 二进制下载源，默认 GitHub releases；每个云端入口可在 Web UI 中单独覆盖 |
+| `ASB_FRP_VERSION` | FRP 版本，默认 `0.61.1` |
+| `ASB_FRPC_BIN` | 复用已安装的 `frpc`，留空则由服务自行下载 |
 | `ASB_FEISHU_ENABLED` | 是否启用飞书入口 |
 | `ASB_FEISHU_ALLOWED_OPEN_IDS` | 允许控制服务的飞书用户列表 |
 | `ASB_FEISHU_ALLOWED_CHAT_IDS` | 允许控制服务的飞书群聊列表 |
 | `ASB_FEISHU_NOTIFY_CHAT_IDS` | 接收审批和失败操作通知的群聊列表 |
+| `ASB_PI_ENABLED` | 是否启用 Pi 工作室，默认关闭 |
+| `ASB_PI_PROVIDER` | Pi 模型提供商：`anthropic`、`openrouter` 或 `openai-compatible` |
+| `ASB_PI_MODEL` | Pi 模型 ID |
+| `ASB_PI_API_KEY` | Pi 专用密钥，不要复用其它 CLI 的凭据 |
+| `ASB_PI_BASE_URL` | OpenAI 兼容接口的 Base URL |
 | `ASB_SERVER_MANAGER_PATH` | 可选服务器管理项目的路径 |
 
 ## 安全
@@ -198,25 +298,31 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 - `ASB_AUTO_CONFIRM_WORKSPACE_TRUST` 默认关闭，只应对完全信任的目录启用。
 - `actorId` 是审计标签，不是多租户身份认证机制。
 - 终端、文件浏览和服务器管理属于高权限功能。
+- 启用 Pi 后会向配置的提供商发送对话、已确认记忆和任务摘要；SSH 密码、私钥、原始终端输出和命令行不会被发送，但任务标题与你自己输入的正文仍可能含敏感信息。详见 [`docs/pi-studio.md`](docs/pi-studio.md)。
+- Android 应用上的 Hub Token 由 Android Keystore 加密保存；SSH 凭据则存在应用私有的 `SharedPreferences` 中，尚未用 Keystore 加密，设备被 root 或备份被导出时不再受保护。
 - 安全问题请使用 GitHub 的私密漏洞报告，不要创建公开 Issue。详情见 [`SECURITY.md`](SECURITY.md)。
 
 ## 限制
 
 - 当前主要面向单一可信操作者，不提供多租户身份隔离。
 - Claude Code 和 Gemini CLI 适配仍处于实验阶段。
-- 远程机器上的会话创建尚未实现。
+- 远程机器上的会话创建尚未实现；SSH 只能发现、观察和发送输入。
+- FRP 第一版只支持一个云端入口，且需要 Linux + systemd + root 或免密 sudo。
 - Git 预览不会执行仓库配置的 clean filter、external diff 或 hook，只支持元数据位于工作区内部的普通 `.git` 目录。
 - Git 预览不包含原生 Git 的 rename detection 和仅文件模式变化。
 - Web UI 刷新或关闭后不会保留 API Token。
+- 备份 Pi 模型配置需要同时包含数据库与 `dataDir/pi-model.key`，丢失密钥会拒绝解密。
+- Android 应用没有后台轮询或前台服务，只在打开或手动刷新时发现变化；Windows 主机尚不作为一等 SSH 目标支持。
 
 ## 项目结构
 
 ```text
-agent-session-bridge/
+agentbridge/
 ├── public/        # Web UI 与 PWA 文件
 ├── src/           # 应用源码
 ├── test/          # 自动测试
 ├── docs/          # 架构、命令和路线文档
+├── android/       # Android WebView 壳与构建脚本
 ├── data/          # 本机运行数据；Git 只跟踪 .gitkeep
 └── .github/       # CI、安全扫描和仓库维护配置
 ```
@@ -234,6 +340,10 @@ npm run check
 
 - [架构说明](docs/architecture.md)
 - [命令说明](docs/commands.md)
+- [指挥中心](docs/command-center.md)
+- [FRP 公网中转](docs/frp-relay.md)
+- [Android App](docs/android-app.md)
+- [Pi 小镇工作室](docs/pi-studio.md)
 - [开发路线](docs/roadmap.md)
 - [贡献指南](CONTRIBUTING.md)
 - [支持范围](SUPPORT.md)

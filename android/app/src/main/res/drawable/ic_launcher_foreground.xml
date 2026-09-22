@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Pixel mascot, centered inside the adaptive-icon safe zone. -->
+    <path android:fillColor="#3B3348" android:pathData="M39,24h3v6h-3z" />
+    <path android:fillColor="#3B3348" android:pathData="M66,24h3v6h-3z" />
+    <path android:fillColor="#3B3348" android:pathData="M39,27h30v6h-30z" />
+    <path android:fillColor="#3B3348" android:pathData="M36,30h3v9h-3z" />
+    <path android:fillColor="#3B3348" android:pathData="M69,30h3v9h-3z" />
+    <path android:fillColor="#F6D1AE" android:pathData="M39,33h30v21h-30z" />
+    <path android:fillColor="#F5A8A8" android:pathData="M39,42h3v3h-3z" />
+    <path android:fillColor="#F5A8A8" android:pathData="M66,42h3v3h-3z" />
+    <path android:fillColor="#2F2A41" android:pathData="M45,39h6v6h-6z" />
+    <path android:fillColor="#2F2A41" android:pathData="M57,39h6v6h-6z" />
+    <path android:fillColor="#C26060" android:pathData="M48,48h3v3h-3z" />
+    <path android:fillColor="#C26060" android:pathData="M57,48h3v3h-3z" />
+    <path android:fillColor="#A95050" android:pathData="M51,48h6v3h-6z" />
+    <path android:fillColor="#3F6B44" android:pathData="M33,54h42v21h-42z" />
+    <path android:fillColor="#315737" android:pathData="M33,54h42v3h-42z" />
+    <path android:fillColor="#39415D" android:pathData="M45,75h9v8h-9z" />
+    <path android:fillColor="#39415D" android:pathData="M57,75h9v8h-9z" />
+    <path android:fillColor="#28304B" android:pathData="M42,81h12v6h-12z" />
+    <path android:fillColor="#28304B" android:pathData="M57,81h12v6h-12z" />
+</vector>

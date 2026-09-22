@@ -1,17 +1,17 @@
 {
-  "name": "agent-session-bridge",
+  "name": "agentbridge",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "private": true,
   "description": "Manage local Codex, Claude Code, and Gemini CLI sessions with tmux, a web UI, CLI, HTTP API, and optional Feishu integration.",
   "type": "module",
-  "homepage": "https://github.com/otterview-labs/agent-session-bridge#readme",
+  "homepage": "https://github.com/otterview-labs/agentbridge#readme",
   "bugs": {
-    "url": "https://github.com/otterview-labs/agent-session-bridge/issues"
+    "url": "https://github.com/otterview-labs/agentbridge/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/otterview-labs/agent-session-bridge.git"
+    "url": "git+https://github.com/otterview-labs/agentbridge.git"
   },
   "keywords": [
     "claude-code",
@@ -28,10 +28,10 @@
   ],
   "packageManager": "npm@11.8.0",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.19.0"
   },
   "bin": {
-    "agent-session-bridge": "./dist/cli.js"
+    "agentbridge": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -45,6 +45,8 @@
     "check": "npm run typecheck && npm test && npm run clean && npm run build"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.86.0",
+    "@earendil-works/pi-ai": "0.86.0",
     "@larksuiteoapi/node-sdk": "^1.73.1",
     "diff": "^9.0.0",
     "isomorphic-git": "^1.41.9",

@@ -1,6 +1,6 @@
 # Security Policy
 
-Agent Session Bridge is a local-first, single-operator control plane. It can read workspace files, send input to local agent sessions, and execute approved commands. Treat every running instance as a privileged developer tool.
+agentBridge is a local-first, single-operator control plane. It can read workspace files, send input to local agent sessions, and execute approved commands. Treat every running instance as a privileged developer tool.
 
 ## Supported versions
 
@@ -10,7 +10,7 @@ Security fixes are applied to the latest commit on `main`. The historical `v0.1.
 
 Please do not open a public issue for a suspected vulnerability. Use GitHub's private vulnerability reporting for this repository:
 
-<https://github.com/otterview-labs/agent-session-bridge/security/advisories/new>
+<https://github.com/otterview-labs/agentbridge/security/advisories/new>
 
 Include the affected version or commit, reproduction steps, impact, and any suggested mitigation. Do not include real credentials, private source code, production data, or destructive proof-of-concept payloads.
 

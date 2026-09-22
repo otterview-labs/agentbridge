@@ -1,6 +1,6 @@
 # Changelog
 
-Notable changes to Agent Session Bridge are documented here.
+Notable changes to agentBridge are documented here.
 
 ## Unreleased
 
@@ -12,7 +12,7 @@ Notable changes to Agent Session Bridge are documented here.
 
 ### Changed
 
-- Simplified the README and visible product copy around the Agent Session Bridge name.
+- Simplified the README and visible product copy around the agentBridge name.
 - Remote HTTP binding now requires a strong API token, explicit allowed hosts, and allowed workspace roots.
 - Feishu authorization and workspace trust confirmation now fail closed by default.
 - Dependency lock data now uses the official npm registry and patched dependency versions.

@@ -1,12 +1,12 @@
 {
-  "name": "Agent Session Bridge",
-  "short_name": "ASB",
+  "name": "agentBridge",
+  "short_name": "agentBridge",
   "description": "Manage local Codex, Claude Code, and Gemini CLI sessions.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f3f6fb",
-  "theme_color": "#2563eb",
+  "background_color": "#f5f7fb",
+  "theme_color": "#161e2e",
   "icons": [
     {
       "src": "/icon.svg",

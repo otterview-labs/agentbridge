@@ -160,10 +160,10 @@ export class SqliteSessionRepository implements SessionRepository {
         SET last_output_digest = ?,
             updated_at = CURRENT_TIMESTAMP,
             last_active_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        WHERE id = ? AND last_output_digest IS NOT ?
         `,
       )
-      .run(digest, id);
+      .run(digest, id, digest);
   }
 
   async updateStatus(id: number, status: SessionStatus): Promise<void> {
@@ -174,10 +174,10 @@ export class SqliteSessionRepository implements SessionRepository {
         SET status = ?,
             updated_at = CURRENT_TIMESTAMP,
             last_active_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        WHERE id = ? AND status != ?
         `,
       )
-      .run(status, id);
+      .run(status, id, status);
   }
 }
 

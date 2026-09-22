@@ -465,7 +465,7 @@ export class CommandRouter {
 
   renderHelp(): string {
     return [
-      'Agent Session Bridge',
+      'agentBridge',
       '',
       'Commands:',
       '  /ping',

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Agent Session Bridge.
+Thanks for helping improve agentBridge.
 
 ## Before opening a change
 
