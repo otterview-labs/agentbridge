@@ -1,5 +1,13 @@
 name: Pages
 
+# The site is static, so it is published by pushing it to a `gh-pages` branch
+# and letting Pages serve that branch. The workflow-artifact pipeline would
+# need actions/upload-pages-artifact, which is a composite action that
+# references actions/upload-artifact by tag — that cannot satisfy this
+# repository's requirement that every action be pinned to a full-length commit
+# SHA, and relaxing a supply-chain rule repo-wide to serve one download page is
+# not a trade worth making. Everything below is plain git plus the one action
+# the repository already allows.
 on:
   push:
     branches:
@@ -11,47 +19,55 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# A half-finished deploy is worse than a queued one, so let the running deploy
+# A half-finished publish is worse than a queued one, so let the running one
 # finish instead of cancelling it.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Assemble the site
-        # The screenshots live in docs/screenshots and are shared with the
-        # README, so they are copied into the artifact at deploy time rather
-        # than duplicated in the tree.
+      - name: Assemble the published tree
+        # Built in a temp directory rather than in site/ so the checkout stays
+        # clean. The screenshots live in docs/screenshots and are shared with
+        # the README, so they are copied in here rather than kept as a second
+        # copy in the tree.
         run: |
           set -euo pipefail
+          out="$RUNNER_TEMP/site"
+          mkdir -p "$out"
+          cp -R site/. "$out/"
           cp docs/screenshots/icon.png \
              docs/screenshots/android-local.png \
              docs/screenshots/android-report.png \
-             site/
-          ls -l site/
+             "$out/"
+          # Without this Pages runs the tree through Jekyll, which adds a way
+          # for the served bytes to differ from the source for no benefit.
+          touch "$out/.nojekyll"
+          find "$out" -type f | sort
 
-      - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
-
-      - name: Upload the site
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
-        with:
-          path: site
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Publish to the gh-pages branch
+        # Generated branch: its history is a series of whole snapshots with
+        # nothing worth keeping, so each run force-pushes one fresh commit
+        # rather than growing the repository forever.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/site"
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Publish ${GITHUB_SHA}"
+          git push --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages
