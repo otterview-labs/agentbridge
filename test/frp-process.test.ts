@@ -279,9 +279,18 @@ test('restarting kills the previous visitor without it marking relays as error',
   await withHarness(t, async (harness) => {
     await configureTunnel(harness);
     await harness.service.start();
+    // Restarting before the first visitor has reported in would be testing a
+    // different thing: a visitor killed mid-startup never reaches its signal
+    // handler, so it records neither START nor TERM and the counts below would
+    // depend on how quickly a shell happened to get scheduled.
+    assert.ok(await waitFor(() => harness.frpcEvents().includes('START')), 'first visitor should be up');
+
     await harness.service.start();
 
-    assert.ok(await waitFor(() => harness.frpcEvents().filter((event) => event === 'START').length === 2));
+    assert.ok(
+      await waitFor(() => harness.frpcEvents().filter((event) => event === 'START').length === 2),
+      'restart should leave a new visitor running',
+    );
     assert.ok(await waitFor(() => harness.frpcEvents().includes('TERM')), 'previous visitor should be terminated');
     await new Promise((resolve) => setTimeout(resolve, 150));
 
@@ -313,8 +322,19 @@ test('a visitor that dies during startup fails the start', async (t) => {
 
     await harness.service.start();
 
-    assert.equal(harness.relay()?.status, 'error');
-    assert.match(harness.relay()?.lastError ?? '', /本地 FRP visitor 启动失败/u);
+    // A visitor that dies before it is up is reported either as a failed start
+    // or as an unexpected exit, depending on whether the child was reaped
+    // inside the startup window. Spawn latency alone can be most of that
+    // window, so the test asserts the guarantee — the relay is not left looking
+    // healthy — rather than one of the two wordings. That means the fast-exit
+    // branch is not covered by anything here: it refines which message is
+    // written, but the exit handler is what keeps the relay from looking
+    // healthy, and only that half is testable.
+    assert.ok(
+      await waitFor(() => harness.relay()?.status === 'error'),
+      'a visitor that cannot start must surface as a relay error',
+    );
+    assert.match(harness.relay()?.lastError ?? '', /FRP visitor/u);
   });
 });
 

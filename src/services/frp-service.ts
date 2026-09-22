@@ -376,12 +376,24 @@ export class FrpService {
         new Date().toISOString(),
       );
     });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    if (child.exitCode !== null) {
-      // The exit handler races this probe: it is registered earlier but fires on
-      // the event loop, so on a busy tick it can land after this check and
-      // overwrite the diagnosis below. Retiring it keeps a visitor that dies at
-      // startup reporting consistently instead of depending on timing.
+    // Give a visitor that cannot start a moment to fail. Waiting on the exit
+    // event rather than sleeping and then reading `exitCode` means a child that
+    // dies well inside the window is noticed the moment it does, and does not
+    // depend on the OS having reaped it yet. A child that dies after the window
+    // is covered by the exit handler above instead; spawn latency alone can be
+    // most of the window, so which of the two diagnoses lands is not something
+    // this can pin down, only that the failure is surfaced either way.
+    const survivedStartup = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(child.exitCode === null), 500);
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolve(false);
+      });
+    });
+    if (!survivedStartup) {
+      // The exit handler registered above fires first and writes an
+      // "exited unexpectedly" diagnosis. Retiring it here keeps that write from
+      // landing after the one below, which is the more specific of the two.
       this.visitorGeneration += 1;
       this.visitorProcess = null;
       throw new DependencyError('本地 FRP visitor 启动失败，请查看 data/frp/visitor-frpc.log。');
