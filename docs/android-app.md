@@ -217,6 +217,15 @@ Both are stable permalinks: the release URL always resolves to the newest
 release, so neither has to be updated when a version ships. `site/index.html`
 holds the page and `.github/workflows/pages.yml` publishes it.
 
+The page is served from a generated `gh-pages` branch, which the workflow
+force-pushes on every change under `site/`. Pages is configured for that branch
+rather than for the workflow-artifact pipeline because
+`actions/upload-pages-artifact` is a composite action that references
+`actions/upload-artifact` by tag, and this repository requires every action to
+be pinned to a full-length commit SHA. Publishing a static page is not worth
+relaxing that rule repo-wide. The branch is generated output, so edit
+`site/index.html` — not `gh-pages`.
+
 Pushing a tag matching `android-v*` makes
 `.github/workflows/android-release.yml` build, sign, verify, and publish the
 APK as `agentbridge.apk`. `workflow_dispatch` builds an existing tag again.
