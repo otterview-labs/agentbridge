@@ -1,6 +1,22 @@
 plugins {
   id 'com.android.application'
 }
+
+// Release signing material is supplied out of band: android/keystore.properties
+// for local builds (gitignored), or the same four values as ASB_ANDROID_* env
+// vars in CI. A checkout with neither still builds — assembleRelease just emits
+// an unsigned APK rather than failing, so nothing here is required to compile.
+def signingProperties = new Properties()
+def signingPropertiesFile = new File(rootDir, 'keystore.properties')
+if (signingPropertiesFile.exists()) {
+  signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+def signingValue = { String key, String envName ->
+  signingProperties.getProperty(key) ?: System.getenv(envName)
+}
+def releaseKeystore = signingValue('storeFile', 'ASB_ANDROID_STORE_FILE')
+def hasReleaseSigning = releaseKeystore != null && !releaseKeystore.isEmpty()
+
 android {
   namespace 'com.otterview.agentsessionbridge'
   compileSdk 35
@@ -12,9 +28,24 @@ android {
     versionCode 37
     versionName '0.5.21'
   }
+  if (hasReleaseSigning) {
+    signingConfigs {
+      release {
+        storeFile file(releaseKeystore)
+        storePassword signingValue('storePassword', 'ASB_ANDROID_STORE_PASSWORD')
+        keyAlias signingValue('keyAlias', 'ASB_ANDROID_KEY_ALIAS')
+        keyPassword signingValue('keyPassword', 'ASB_ANDROID_KEY_PASSWORD')
+      }
+    }
+  }
   buildTypes {
     debug {
       applicationIdSuffix '.debug'
+    }
+    release {
+      if (hasReleaseSigning) {
+        signingConfig signingConfigs.release
+      }
     }
   }
   compileOptions {

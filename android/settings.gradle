@@ -1,8 +1,16 @@
+// The Aliyun mirrors are a convenience for building from China. CI runs on
+// GitHub's runners, where reaching them buys nothing and adds a slow, second
+// way for dependency resolution to fail, so ASB_GRADLE_SKIP_CN_MIRRORS=1 turns
+// them off and leaves only the upstream repositories. The check is inlined
+// rather than hoisted into a variable because pluginManagement is evaluated
+// before the rest of this script, so script locals are not reliably in scope.
 pluginManagement {
   repositories {
-    maven { url = uri('https://maven.aliyun.com/repository/gradle-plugin') }
-    maven { url = uri('https://maven.aliyun.com/repository/google') }
-    maven { url = uri('https://maven.aliyun.com/repository/public') }
+    if (System.getenv('ASB_GRADLE_SKIP_CN_MIRRORS') != '1') {
+      maven { url = uri('https://maven.aliyun.com/repository/gradle-plugin') }
+      maven { url = uri('https://maven.aliyun.com/repository/google') }
+      maven { url = uri('https://maven.aliyun.com/repository/public') }
+    }
     google()
     mavenCentral()
     gradlePluginPortal()
@@ -11,8 +19,10 @@ pluginManagement {
 dependencyResolutionManagement {
   repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
   repositories {
-    maven { url = uri('https://maven.aliyun.com/repository/google') }
-    maven { url = uri('https://maven.aliyun.com/repository/public') }
+    if (System.getenv('ASB_GRADLE_SKIP_CN_MIRRORS') != '1') {
+      maven { url = uri('https://maven.aliyun.com/repository/google') }
+      maven { url = uri('https://maven.aliyun.com/repository/public') }
+    }
     google()
     mavenCentral()
   }

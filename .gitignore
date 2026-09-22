@@ -20,3 +20,8 @@ android/app/build/
 android/local.properties
 android/.idea/
 android/*.iml
+# Release signing material must never enter the repository. The keystore
+# itself lives outside the working tree; these are belt-and-braces.
+android/keystore.properties
+*.jks
+*.keystore
