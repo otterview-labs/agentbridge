@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>agentBridge Android 应用</title>
-<meta name="description" content="在手机上连接自己的机器，查看并回复上面运行的 Claude Code / Codex 会话。">
+<meta name="description" content="在手机上连自己的机器，查看并回复上面正在跑的 Claude Code / Codex 会话。">
 <link rel="icon" href="icon.png">
 <style>
 :root{
   color-scheme:light;
-  --paper:#fffffc;--ink:#2b2b28;--muted:#71716a;
+  --paper:#fffffc;--ink:#2b2b28;--muted:#66665f;
   --line:#e3e3dd;--link:#2f5d43;--code:#f2f2ec;
 }
 *{box-sizing:border-box}
@@ -19,8 +19,9 @@ body{
 }
 .wrap{max-width:620px;margin:0 auto;padding:64px 24px 80px}
 a{color:var(--link)}
+a:focus-visible{outline:3px solid #8a6a2f;outline-offset:2px}
 h1{font-size:24px;line-height:1.4;margin:0 0 8px;font-weight:600}
-h2{font-size:16px;margin:40px 0 12px;font-weight:600}
+h2{font-size:18px;line-height:1.5;margin:40px 0 12px;font-weight:600}
 p{margin:0 0 16px}
 .lede{color:var(--muted)}
 .download{
@@ -29,48 +30,47 @@ p{margin:0 0 16px}
 }
 .download:hover{background:#264c37}
 .download:focus-visible{outline:3px solid #8a6a2f;outline-offset:3px}
-.meta{margin:14px 0 0;font-size:14px;color:var(--muted)}
-ol{padding-left:22px;margin:0 0 16px}
-li{margin:8px 0}
+.meta{margin:14px 0 16px;font-size:14px;color:var(--muted)}
 code{
   font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
   background:var(--code);padding:2px 5px;border-radius:4px;
 }
 .shots{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 16px}
-.shots img{width:184px;flex:none;border:1px solid var(--line);border-radius:8px}
+.shots img{width:184px;aspect-ratio:640/1410;flex:none;border:1px solid var(--line);border-radius:8px}
 footer{
   margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
   font-size:14px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px 18px;
 }
-@media (max-width:520px){.wrap{padding:44px 18px 60px}.shots img{width:calc(50% - 7px)}}
+@media (max-width:520px){
+  .wrap{padding:44px 18px 60px}
+  .shots img{width:calc(50% - 7px)}
+  .download{display:block;text-align:center}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
   <h1>agentBridge Android 应用</h1>
-  <p class="lede">在手机上连接自己的机器，查看并回复上面运行的 Claude Code / Codex 会话。</p>
+  <p class="lede">在手机上连自己的机器，查看并回复上面正在跑的 Claude Code / Codex 会话。</p>
 
   <p><a class="download"
         href="https://github.com/otterview-labs/agentbridge/releases/latest/download/agentbridge.apk">下载 APK</a></p>
-  <p class="meta"><span id="release-version">最新版</span> · Android 7.0 及以上 · 约 300 KB · Apache-2.0</p>
+  <p class="meta"><span id="release-version">最新版</span> · Android 7.0 及以上 · 约 300 KB · Apache&#8209;2.0</p>
+  <p>首次安装会被系统拦一次，需要在设置里允许「安装未知来源应用」。</p>
 
   <h2>用法</h2>
-  <p>应用可以直接 SSH 到你的机器，列出上面正在跑的 Claude Code / Codex 会话，看输出、发输入。被连的机器不需要装 agentBridge。</p>
-  <p>也可以连你已经跑着的 agentBridge 服务，工作室的对话、记忆、日报跟网页端是同一份；断网时退回本机记录。</p>
-  <p>语音输入优先用手机自带的识别。手机没有识别器时，短录音会发到 agentBridge 服务用 <code>whisper-cli</code> 转写，转完即删，不经过第三方。</p>
+  <p>装完打开，用「发现机器」扫描局域网，或者填 SSH 地址和账号（密码或私钥）。</p>
+  <p>它走你机器上现有的 SSH，被连的机器不需要装 agentBridge。</p>
+  <p>如果你已经在跑 agentBridge 服务，App 也能连上去，跟网页端共用同一份数据。</p>
+  <p>语音输入用手机自带的识别；手机没有识别器时，录音发到你自己的 agentBridge 服务转写。</p>
 
   <div class="shots">
     <img src="android-local.png" alt="本机记录" width="184">
     <img src="android-report.png" alt="管家日报" width="184">
   </div>
 
-  <h2>安装</h2>
-  <ol>
-    <li>下载 <code>agentbridge.apk</code>。</li>
-    <li>系统会拦一次，在设置里允许安装未知来源应用。</li>
-    <li>打开应用，用「发现机器」扫描局域网，或者手动填 SSH 地址和账号。</li>
-  </ol>
+  <p>应用没有统计和上报，所有连接地址都是你自己填的。</p>
   <p>APK 由本仓库的 CI 从 <code>android-v*</code> 标签构建，用固定的发布密钥签名。构建日志在 Actions 里，也可以对照源码自行构建。</p>
 
   <footer>
@@ -80,7 +80,7 @@ footer{
     <a href="https://github.com/otterview-labs/agentbridge/blob/main/SECURITY.md">安全策略</a>
   </footer>
 
-</div>
+</main>
 <script>
   // Best effort only: the download button already points at /releases/latest,
   // so the page stays correct if this never resolves.
