@@ -19,6 +19,7 @@ final class BridgeStore {
   private static final String PREFS = "phone_controller_v1";
   private static final String KEY_MACHINES = "machines";
   private static final String KEY_TASKS = "tasks";
+  private static final String KEY_DELETED_TASKS = "deleted_tasks";
   private static final String KEY_FRP_SERVER = "frp_server";
   private static final String KEY_FRP_RELAYS = "frp_relays";
   private static final String KEY_HOST_KEYS = "host_keys";
@@ -40,6 +41,14 @@ final class BridgeStore {
 
   synchronized JSONArray tasks() throws Exception {
     return new JSONArray(prefs.getString(KEY_TASKS, "[]"));
+  }
+
+  synchronized JSONArray deletedTasks() throws Exception {
+    return new JSONArray(prefs.getString(KEY_DELETED_TASKS, "[]"));
+  }
+
+  synchronized void saveDeletedTasks(JSONArray value) {
+    prefs.edit().putString(KEY_DELETED_TASKS, value.toString()).apply();
   }
 
   synchronized JSONArray studioMemories() throws Exception {
@@ -185,6 +194,14 @@ final class BridgeStore {
     }
     saveMachines(keptMachines);
     saveTasks(keptTasks);
+    JSONArray deletedTasks = deletedTasks();
+    JSONArray keptDeletedTasks = new JSONArray();
+    for (int index = 0; index < deletedTasks.length(); index += 1) {
+      if (deletedTasks.getJSONObject(index).getInt("machineId") != id) {
+        keptDeletedTasks.put(deletedTasks.get(index));
+      }
+    }
+    saveDeletedTasks(keptDeletedTasks);
 
     JSONObject server = frpServer();
     if (server != null && server.getInt("machineId") == id) {
@@ -222,6 +239,92 @@ final class BridgeStore {
     }
     items.put(task);
     saveTasks(items);
+  }
+
+  synchronized void deleteTask(int id) throws Exception {
+    JSONArray tasks = tasks();
+    JSONArray keptTasks = new JSONArray();
+    JSONObject deleted = null;
+    for (int index = 0; index < tasks.length(); index += 1) {
+      JSONObject task = tasks.getJSONObject(index);
+      if (task.getInt("id") == id) {
+        deleted = task;
+        deleted.put("deletedAt", now());
+      } else {
+        keptTasks.put(tasks.get(index));
+      }
+    }
+    if (deleted == null) throw new IllegalArgumentException("员工不存在");
+
+    JSONArray deletedTasks = deletedTasks();
+    JSONArray keptDeleted = new JSONArray();
+    boolean replaced = false;
+    for (int index = 0; index < deletedTasks.length(); index += 1) {
+      JSONObject item = deletedTasks.getJSONObject(index);
+      if (item.getInt("machineId") == deleted.getInt("machineId")
+          && sameTaskIdentity(item, deleted)) {
+        if (!replaced) {
+          keptDeleted.put(deleted);
+          replaced = true;
+        }
+      } else {
+        keptDeleted.put(deletedTasks.get(index));
+      }
+    }
+    if (!replaced) keptDeleted.put(deleted);
+    while (keptDeleted.length() > 200) keptDeleted.remove(0);
+    saveTasks(keptTasks);
+    saveDeletedTasks(keptDeleted);
+  }
+
+  synchronized void restoreDeletedTask(int id) throws Exception {
+    JSONArray deletedTasks = deletedTasks();
+    JSONArray keptDeletedTasks = new JSONArray();
+    JSONObject restored = null;
+    for (int index = 0; index < deletedTasks.length(); index += 1) {
+      JSONObject item = deletedTasks.getJSONObject(index);
+      if (item.getInt("id") == id) restored = item;
+      else keptDeletedTasks.put(deletedTasks.get(index));
+    }
+    if (restored == null) throw new IllegalArgumentException("已删除员工不存在");
+    restored.remove("deletedAt");
+    JSONArray tasks = tasks();
+    JSONArray keptTasks = new JSONArray();
+    boolean replaced = false;
+    for (int index = 0; index < tasks.length(); index += 1) {
+      JSONObject item = tasks.getJSONObject(index);
+      if (item.getInt("machineId") == restored.getInt("machineId") && sameTaskIdentity(item, restored)) {
+        if (!replaced) {
+          keptTasks.put(restored);
+          replaced = true;
+        }
+      } else {
+        keptTasks.put(tasks.get(index));
+      }
+    }
+    if (!replaced) keptTasks.put(restored);
+    saveTasks(keptTasks);
+    saveDeletedTasks(keptDeletedTasks);
+  }
+
+  synchronized boolean isDeletedTask(JSONObject task) throws Exception {
+    JSONArray deletedTasks = deletedTasks();
+    for (int index = 0; index < deletedTasks.length(); index += 1) {
+      JSONObject item = deletedTasks.getJSONObject(index);
+      if (item.getInt("machineId") == task.getInt("machineId") && sameTaskIdentity(item, task)) return true;
+    }
+    return false;
+  }
+
+  private boolean sameTaskIdentity(JSONObject left, JSONObject right) {
+    String leftSession = left.optString("externalSessionId", "");
+    String rightSession = right.optString("externalSessionId", "");
+    if (!leftSession.isEmpty() && leftSession.equals(rightSession)) return true;
+    return left.optString("stableKey", "").equals(right.optString("stableKey", ""));
+  }
+
+  private String now() {
+    return java.time.format.DateTimeFormatter.ISO_INSTANT.format(java.time.Instant.now());
   }
 
   HostKeyRepository hostKeyRepository() {

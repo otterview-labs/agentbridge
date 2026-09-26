@@ -6,6 +6,9 @@ Notable changes to agentBridge are documented here.
 
 ### Added
 
+- Android 0.5.25 employee removal: deleted employees stay in a per-office
+  restorable list, do not reappear during discovery, and never delete remote
+  projects, session transcripts, or workspace files.
 - Android 0.5.24 discovery de-duplication: Claude processes sharing one session
   collapse to one employee, while Codex Desktop subagent/review threads remain
   hidden under their parent user thread.

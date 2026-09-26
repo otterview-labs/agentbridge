@@ -79,6 +79,18 @@ h2 { margin: 0; font-size: 21px; line-height: 1.22; letter-spacing: -.02em; }
 .employees { padding: 8px; display: grid; gap: 7px; background: #fbf8ef; }
 .officeEmpty { padding: 14px 9px 16px; color: #74826e; font-size: 12px; text-align: center; background: repeating-linear-gradient(45deg, #fffdf8 0 12px, #faf5e8 12px 24px); }
 .officeCollapsedSummary { padding: 12px 14px 14px; border-top: 3px solid #33422f; color: #62705b; background: #f6efdd; font-size: 12px; font-weight: 750; text-align: center; }
+.deletedEmployees { margin: 0 8px 10px; padding: 9px; border: 2px dashed #b8ab87; border-radius: 14px; background: #f7f2e6; }
+.deletedEmployees header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.deletedEmployees strong { color: #62705b; font-size: 12px; }
+.deletedEmployees small { color: #8b9583; font-size: 9px; }
+.deletedEmployeeList { display: grid; gap: 7px; }
+.deletedEmployee { display: grid; grid-template-columns: 54px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 8px; border: 2px solid #ddd4b9; border-radius: 13px; background: #fffdf8; }
+.deletedEmployee .employeeStage { width: 54px; height: 70px; }
+.deletedEmployeeInfo { min-width: 0; }
+.deletedEmployeeInfo strong { display: block; color: #62705b; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.deletedEmployeeInfo small { display: block; margin-top: 3px; color: #8b9583; font-size: 9px; line-height: 1.4; }
+.deletedEmployee .pixelAvatar { filter: saturate(.35); }
+.deletedEmployee .smallAction { min-height: 32px; padding: 0 9px; font-size: 11px; }
 
 .publicCard { overflow: hidden; border: 3px solid #33422f; border-radius: 20px; background: #fffdf8; box-shadow: 0 7px 0 rgba(51,66,47,.12); }
 .publicHeader { display: grid; gap: 8px; padding: 13px 14px; border-bottom: 3px solid #33422f; background: #e5ecf7; }
@@ -216,8 +228,10 @@ button:focus-visible { outline: 3px solid #a96940; outline-offset: 3px; }
 .rawRecord .output { border: 0; border-top: 2px solid #cfc3a2; border-radius: 0; }
 .output { max-height: 36vh; overflow: auto; margin: 0; padding: 12px; border: 2px solid #cfc3a2; border-radius: 13px; background: #293226; color: #e9f1df; font-size: 11px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
 .replyLabel { color: #62705b !important; font-size: 11px !important; font-weight: 850; }
-.taskActions { display: grid; grid-template-columns: 88px 100px 1fr; gap: 7px; }
+.taskActions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
 .taskActions button { min-height: 45px; }
+.taskActions .primaryAction { grid-column: 1 / -1; }
+.taskActions .deleteAction { color: #fffdf8; border-color: #8a3f26; background: #b3653f; }
 
 .butlerHero { overflow: hidden; border: 3px solid #33422f; border-radius: 21px; background: #fffdf8; box-shadow: 0 7px 0 rgba(51,66,47,.12); }
 .butlerHeroHeader { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 10px 11px; background: #e5eddf; border-bottom: 3px solid #33422f; }
@@ -283,7 +297,7 @@ button:focus-visible { outline: 3px solid #a96940; outline-offset: 3px; }
 @keyframes employeeWaiting { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-1px); } }
 @keyframes bubblePulse { from { transform: translateX(-50%) translateY(0); } to { transform: translateX(-50%) translateY(-2px); } }
 .toast { position: fixed; left: 50%; bottom: 104px; z-index: 100; max-width: min(86vw,520px); padding: 11px 14px; border: 2px solid #33422f; border-radius: 13px; background: #33422f; color: #fffdf8; font-size: 12px; line-height: 1.5; transform: translateX(-50%); box-shadow: 0 8px 22px rgba(0,0,0,.22); }
-@media (max-width:390px) { h1 { font-size:27px; } .taskActions { grid-template-columns:1fr 1.3fr 1fr; } .taskActions button { font-size:12px; } .employee { grid-template-columns:68px minmax(0,1fr); gap:8px; } .employeeStage { transform: scale(.86); transform-origin: center; } }
+@media (max-width:390px) { h1 { font-size:27px; } .taskActions { grid-template-columns:repeat(2,minmax(0,1fr)); } .taskActions button { font-size:12px; } .employee { grid-template-columns:68px minmax(0,1fr); gap:8px; } .employeeStage { transform: scale(.86); transform-origin: center; } .deletedEmployee { grid-template-columns:48px minmax(0,1fr) auto; } .deletedEmployee .employeeStage { width:48px; height:62px; } }
 @media (min-width:700px) { .sheetBackdrop { align-items:center; } .sheet { border-bottom:3px solid #33422f; border-radius:24px; } }
 @media (prefers-reduced-motion: reduce) { .pixelAvatar, .employeeBubble, .employee, .todoCard, .voiceWave span { animation: none !important; transition: none !important; } }
 

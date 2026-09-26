@@ -4,6 +4,7 @@
   const state = {
     machines: [],
     tasks: [],
+    deletedTasks: [],
     frpServer: null,
     frpRelays: [],
     studio: null,
@@ -28,6 +29,7 @@
     voiceStartedAt: 0,
     collapsedSprites: loadCollapsedSprites()
   };
+  const showDeletedOffices = new Set();
   const voicePointer = { id: null, x: 0, y: 0, startedAt: 0, cancelArmed: false };
   const agentNames = { codex: 'Codex', 'claude-code': 'Claude', gemini: 'Gemini' };
   const $ = (id) => document.getElementById(id);
@@ -183,6 +185,7 @@
     });
   });
   $('renameTask').addEventListener('click', renameCurrentTask);
+  $('deleteTask').addEventListener('click', deleteCurrentTask);
   $('tailTask').addEventListener('click', refreshCurrentTask);
   $('sendTask').addEventListener('click', sendCurrentTask);
 
@@ -215,6 +218,7 @@
     if (!result.ok) return false;
     state.machines = result.data.machines || [];
     state.tasks = result.data.tasks || [];
+    state.deletedTasks = result.data.deletedTasks || [];
     state.frpServer = result.data.frpServer || null;
     state.frpRelays = result.data.frpRelays || [];
     state.networkHint = result.data.networkHint || '';
@@ -395,6 +399,7 @@
     const data = parsed.data;
     state.machines = data.machines || [];
     state.tasks = data.tasks || [];
+    state.deletedTasks = data.deletedTasks || [];
     state.frpServer = data.frpServer || null;
     state.frpRelays = data.frpRelays || [];
     state.networkHint = data.networkHint || '';
@@ -434,6 +439,7 @@
     $('sendTask').disabled = !task || Boolean(background) || Boolean(tailing);
     $('tailTask').disabled = !task || Boolean(tailing);
     $('renameTask').disabled = !task;
+    $('deleteTask').disabled = !task || Boolean(background) || Boolean(tailing);
     if (!task) {
       $('taskStatusLine').textContent = '本次未发现此会话，以下为上次记录';
       $('taskNeed').classList.add('hidden');
@@ -585,6 +591,24 @@
       $('taskTitle').textContent = result.data.task.title;
       await loadState();
     }
+  }
+
+  async function deleteCurrentTask() {
+    const task = currentTask();
+    if (!task) return;
+    if (state.backgroundSends.has(task.id) || state.backgroundTails.has(task.id)) {
+      toast('这个员工还有后台任务，完成后再删除');
+      return;
+    }
+    const name = taskDisplayName(task);
+    if (!window.confirm(`把「${name}」移到已删除列表？\n\n不会删除机器上的项目、会话记录或文件。`)) return;
+    const result = await call('deleteTask', '移出办公室…', task.id);
+    if (!result.ok) return;
+    state.drafts.delete(task.id);
+    showDeletedOffices.add(task.machineId);
+    closeSheet('taskBackdrop');
+    await loadState();
+    toast('已移到删除列表');
   }
 
   function refreshCurrentTask() {
@@ -1070,10 +1094,18 @@
       title.appendChild(titleMeta);
       title.appendChild(element('p', `officeCheck${machine.lastStatus === 'offline' ? ' failed' : ''}`, machineCheckText(machine)));
       const actions = element('div', 'officeActions');
+      const deletedTasks = state.deletedTasks.filter(task => task.machineId === machine.id);
       actions.appendChild(actionButton('测试', () => probeMachine(machine.id), 'advancedAction'));
       const discovering = state.backgroundDiscovers.has(machine.id);
       actions.appendChild(actionButton(discovering ? '发现中' : '找任务', discovering ? () => toast('这间办公室正在发现员工') : () => discoverMachine(machine.id), 'dark'));
       actions.appendChild(actionButton(isCollapsed(machine.id) ? '展开' : '收起', () => toggleSprites(machine.id), 'spriteToggle advancedAction'));
+      if (deletedTasks.length) {
+        actions.appendChild(actionButton(
+          showDeletedOffices.has(machine.id) ? '收起删除' : `删除 ${deletedTasks.length}`,
+          () => toggleDeletedOffice(machine.id),
+          'deletedToggle advancedAction',
+        ));
+      }
       actions.appendChild(actionButton('编辑', () => editMachine(machine.id), 'advancedAction'));
       actions.appendChild(actionButton('删除', () => deleteMachine(machine.id), 'warn advancedAction'));
       actions.appendChild(actionButton('更多', () => {
@@ -1102,8 +1134,49 @@
         }
         office.appendChild(employees);
       }
+      if (showDeletedOffices.has(machine.id)) appendDeletedEmployees(office, deletedTasks);
       container.appendChild(office);
     });
+  }
+
+  function toggleDeletedOffice(machineId) {
+    if (showDeletedOffices.has(machineId)) showDeletedOffices.delete(machineId);
+    else showDeletedOffices.add(machineId);
+    render();
+  }
+
+  function appendDeletedEmployees(office, tasks) {
+    const section = element('section', 'deletedEmployees');
+    const header = element('header');
+    header.appendChild(element('strong', '', '删除列表'));
+    header.appendChild(element('small', '', '不占用工作现场，可随时恢复'));
+    section.appendChild(header);
+    if (!tasks.length) {
+      section.appendChild(element('p', 'officeEmpty', '这里没有已删除员工。'));
+      office.appendChild(section);
+      return;
+    }
+    const list = element('div', 'deletedEmployeeList');
+    tasks.forEach(task => {
+      const row = element('article', 'deletedEmployee');
+      const stage = element('span', 'employeeStage');
+      stage.append(employeeSprite(task.agentType, Number(String(task.id).replace(/\D/g, '')) % 3));
+      const info = element('div', 'deletedEmployeeInfo');
+      info.appendChild(element('strong', '', taskDisplayName(task)));
+      info.appendChild(element('small', '', `${agentNames[task.agentType] || task.agentType} · 删除于 ${checkTime(task.deletedAt)}`));
+      const restore = actionButton('恢复', () => void restoreDeletedTask(task.id), 'dark');
+      row.append(stage, info, restore);
+      list.appendChild(row);
+    });
+    section.appendChild(list);
+    office.appendChild(section);
+  }
+
+  async function restoreDeletedTask(id) {
+    const result = await call('restoreDeletedTask', '恢复员工…', id);
+    if (!result.ok) return;
+    await loadState();
+    toast('员工已恢复');
   }
 
   function renderPiDetail() {

@@ -65,6 +65,7 @@ final class PhoneBridge {
       JSONObject data = new JSONObject();
       data.put("machines", store.machines());
       data.put("tasks", store.tasks());
+      data.put("deletedTasks", store.deletedTasks());
       data.put("frpServer", publicFrpServer());
       data.put("frpRelays", publicFrpRelays());
       data.put("networkHint", networkHint());
@@ -1363,6 +1364,7 @@ final class PhoneBridge {
           discovered.put(task);
         }
         for (JSONObject task : codexDesktopTasks) discovered.put(task);
+        discovered = withoutDeletedTasks(discovered);
         Log.d("AgentBridgeNative", "discovered machine=" + machineId
             + " tmux=" + (probe.optString("tmuxVersion").isEmpty() ? 0 : 1)
             + " total=" + discovered.length());
@@ -1391,6 +1393,39 @@ final class PhoneBridge {
     } catch (Exception error) {
       return failure(error);
     }
+  }
+
+  @JavascriptInterface
+  public String deleteTask(int id) {
+    try {
+      store.deleteTask(id);
+      return success(new JSONObject()
+          .put("tasks", store.tasks())
+          .put("deletedTasks", store.deletedTasks()));
+    } catch (Exception error) {
+      return failure(error);
+    }
+  }
+
+  @JavascriptInterface
+  public String restoreDeletedTask(int id) {
+    try {
+      store.restoreDeletedTask(id);
+      return success(new JSONObject()
+          .put("tasks", store.tasks())
+          .put("deletedTasks", store.deletedTasks()));
+    } catch (Exception error) {
+      return failure(error);
+    }
+  }
+
+  private JSONArray withoutDeletedTasks(JSONArray discovered) throws Exception {
+    JSONArray visible = new JSONArray();
+    for (int index = 0; index < discovered.length(); index += 1) {
+      JSONObject task = discovered.getJSONObject(index);
+      if (!store.isDeletedTask(task)) visible.put(task);
+    }
+    return visible;
   }
 
   @JavascriptInterface
