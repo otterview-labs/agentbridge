@@ -484,3 +484,12 @@ test('phone butler calls the model directly and contains no Hub client path', ()
   assert.match(source, /Bearer " \+ model\.getString\("apiKey"\)/);
   assert.match(source, /不经过 Hub/);
 });
+
+test('discovery collapses duplicate Claude processes and Codex subagents', () => {
+  const source = fs.readFileSync(path.resolve(assets, '../java/com/otterview/agentsessionbridge/PhoneBridge.java'), 'utf8');
+  assert.match(source, /dedupeProcessTasksBySession/);
+  assert.match(source, /"claude:" \+ externalSessionId/);
+  assert.match(source, /"subagent"\.equals\(threadSource\) \|\| !parentThreadId\.isEmpty\(\)/);
+  // Renames must survive the stable-key migration from PID to session ID.
+  assert.match(source, /oldByExternalSession\.get\(externalSessionId\)/);
+});

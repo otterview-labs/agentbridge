@@ -2098,7 +2098,10 @@ final class PhoneBridge {
       } else {
         status = work != null && "idle".equals(work.status) ? "idle" : "running";
       }
-      JSONObject task = baseTask(machineId, machineTaskKey(paneId), paneId, agentType, "process");
+      String stableKey = "claude-code".equals(agentType) && !externalSessionId.isEmpty()
+          ? "claude:" + externalSessionId
+          : machineTaskKey(paneId);
+      JSONObject task = baseTask(machineId, stableKey, paneId, agentType, "process");
       task.put("sessionName", "process")
           .put("windowName", workspaceName)
           .put("windowIndex", 0)
@@ -2114,7 +2117,52 @@ final class PhoneBridge {
           .put("updatedAt", now());
       result.add(task);
     }
+    return dedupeProcessTasksBySession(result);
+  }
+
+  private List<JSONObject> dedupeProcessTasksBySession(List<JSONObject> tasks) {
+    Map<String, JSONObject> bySession = new HashMap<>();
+    List<JSONObject> result = new ArrayList<>();
+    for (JSONObject task : tasks) {
+      String sessionId = task.optString("externalSessionId", "");
+      if (sessionId.isEmpty() || !"claude-code".equals(task.optString("agentType"))) {
+        result.add(task);
+        continue;
+      }
+      JSONObject old = bySession.get(sessionId);
+      if (old == null || preferProcessTask(task, old)) {
+        if (old != null) result.remove(old);
+        bySession.put(sessionId, task);
+        result.add(task);
+      }
+    }
     return result;
+  }
+
+  private boolean preferProcessTask(JSONObject candidate, JSONObject old) {
+    int candidateScore = processTaskScore(candidate);
+    int oldScore = processTaskScore(old);
+    if (candidateScore != oldScore) return candidateScore > oldScore;
+    // A stable lower PID is usually the long-lived parent process rather than a
+    // short-lived wrapper/child that happens to reference the same session.
+    return parseProcessPid(candidate.optString("paneId", "")) < parseProcessPid(old.optString("paneId", ""));
+  }
+
+  private int processTaskScore(JSONObject task) {
+    int score = 0;
+    if ("running".equals(task.optString("status"))) score += 4;
+    if (!task.optString("workSummary", "").trim().isEmpty()) score += 2;
+    if (!task.optString("requiredInput", "").trim().isEmpty()) score += 1;
+    return score;
+  }
+
+  private int parseProcessPid(String paneId) {
+    if (!paneId.startsWith("process:")) return Integer.MAX_VALUE;
+    try {
+      return Integer.parseInt(paneId.substring("process:".length()));
+    } catch (Exception ignored) {
+      return Integer.MAX_VALUE;
+    }
   }
 
   private List<JSONObject> listCodexDesktopTasks(Session session, int machineId) throws Exception {
@@ -2192,6 +2240,12 @@ final class PhoneBridge {
 
       String workspace = extractJsonStringField(metaLine, "cwd");
       String originator = extractJsonStringField(metaLine, "originator");
+      String threadSource = extractJsonStringField(metaLine, "thread_source");
+      String parentThreadId = extractJsonStringField(metaLine, "parent_thread_id");
+      // Desktop subagents share their parent's workspace and often have the same
+      // derived title. They are implementation details of one employee, not a
+      // separate employee card.
+      if ("subagent".equals(threadSource) || !parentThreadId.isEmpty()) continue;
       if (workspace.trim().isEmpty()) workspace = "/tmp";
       String workspaceName = workspace.substring(workspace.lastIndexOf('/') + 1);
       if (workspaceName.isEmpty()) workspaceName = "Home";
@@ -2238,14 +2292,20 @@ final class PhoneBridge {
 
   private void preserveCustomTitles(int machineId, JSONArray discovered) throws Exception {
     Map<String, JSONObject> oldByKey = new HashMap<>();
+    Map<String, JSONObject> oldByExternalSession = new HashMap<>();
     JSONArray oldTasks = store.tasks();
     for (int index = 0; index < oldTasks.length(); index += 1) {
       JSONObject task = oldTasks.getJSONObject(index);
-      if (task.getInt("machineId") == machineId) oldByKey.put(task.getString("stableKey"), task);
+      if (task.getInt("machineId") != machineId) continue;
+      oldByKey.put(task.getString("stableKey"), task);
+      String externalSessionId = task.optString("externalSessionId", "");
+      if (!externalSessionId.isEmpty()) oldByExternalSession.put(externalSessionId, task);
     }
     for (int index = 0; index < discovered.length(); index += 1) {
       JSONObject task = discovered.getJSONObject(index);
+      String externalSessionId = task.optString("externalSessionId", "");
       JSONObject old = oldByKey.get(task.getString("stableKey"));
+      if (old == null && !externalSessionId.isEmpty()) old = oldByExternalSession.get(externalSessionId);
       if (old == null) {
         task.put("id", store.nextId());
         continue;

@@ -7,8 +7,8 @@ Linux machines over SSH directly from the phone.
 Current debug version:
 
 ```text
-versionName: 0.5.23
-versionCode: 39
+versionName: 0.5.24
+versionCode: 40
 minSdk: 24
 targetSdk: 35
 package: com.otterview.agentsessionbridge.debug
@@ -60,6 +60,11 @@ android/app/build/outputs/apk/debug/app-debug.apk
 - Claude/Codex process discovery.
 - Codex Desktop thread discovery through `~/.codex/thread-writer-locks`,
   `~/.codex/session_index.jsonl`, and rollout transcripts.
+- Codex Desktop subagent/review threads are not shown as separate employees;
+  only their parent user thread represents the work.
+- Multiple Claude processes that reference the same session ID collapse into
+  one employee card. The most informative/running process wins, and custom names
+  survive the PID-to-session identity migration.
 - Task aliases and a “waiting for input” list.
 - Direct replies to tmux panes and resumable CLI sessions.
 - Codex replies prefer the newer Codex Desktop binary so paginated Desktop

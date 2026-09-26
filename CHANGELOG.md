@@ -6,6 +6,9 @@ Notable changes to agentBridge are documented here.
 
 ### Added
 
+- Android 0.5.24 discovery de-duplication: Claude processes sharing one session
+  collapse to one employee, while Codex Desktop subagent/review threads remain
+  hidden under their parent user thread.
 - Android 0.5.23 Hub-free butler mode: direct OpenAI-compatible model calls,
   local conversations, local memories, and locally generated task plans.
 - Public contribution, support, and security documentation.
