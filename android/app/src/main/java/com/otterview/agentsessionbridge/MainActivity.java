@@ -2,6 +2,10 @@ package com.otterview.agentsessionbridge;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -31,6 +35,8 @@ import java.util.Locale;
 
 public final class MainActivity extends Activity {
   private static final int REQUEST_VOICE = 41024;
+  private static final int REQUEST_NOTIFICATIONS = 41025;
+  private static final int RESULT_NOTIFICATION_ID = 41027;
 
   private WebView webView;
   private PhoneBridge bridge;
@@ -53,9 +59,48 @@ public final class MainActivity extends Activity {
     }
   };
 
+  private void ensureResultChannel() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      NotificationChannel channel = new NotificationChannel(
+          "asb_task_results", "Agent Bridge 任务结果", NotificationManager.IMPORTANCE_DEFAULT);
+      getSystemService(NotificationManager.class).createNotificationChannel(channel);
+    }
+  }
+
+  void showTaskNotification(String title, String message) {
+    ensureResultChannel();
+    Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        ? new Notification.Builder(this, "asb_task_results")
+        : new Notification.Builder(this);
+    PendingIntent contentIntent = PendingIntent.getActivity(
+        this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
+    Notification notification = builder
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(title)
+        .setContentText(message)
+        .setContentIntent(contentIntent)
+        .setAutoCancel(true)
+        .build();
+    getSystemService(NotificationManager.class).notify(RESULT_NOTIFICATION_ID, notification);
+  }
+
+  void startTaskForeground() {
+    Intent intent = new Intent(this, TaskForegroundService.class);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent);
+    else startService(intent);
+  }
+
+  void stopTaskForeground() {
+    stopService(new Intent(this, TaskForegroundService.class));
+  }
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+          REQUEST_NOTIFICATIONS);
+    }
     webView = new WebView(this);
     if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
       WebView.setWebContentsDebuggingEnabled(true);

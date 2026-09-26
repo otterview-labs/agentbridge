@@ -7,8 +7,8 @@ Linux machines over SSH directly from the phone.
 Current debug version:
 
 ```text
-versionName: 0.5.21
-versionCode: 37
+versionName: 0.5.22
+versionCode: 38
 minSdk: 24
 targetSdk: 35
 package: com.otterview.agentsessionbridge.debug
@@ -41,9 +41,14 @@ android/app/build/outputs/apk/debug/app-debug.apk
   not survive a page reload or app restart and are not written to local storage.
   Confirmed sends clear drafts even if the following record reload fails;
   failed sends retain them. Concurrent sends are blocked.
+- Reply, discovery, output refresh, and task-planning operations run in native
+  background threads. The UI shows a background counter, keeps navigation
+  available, starts an Android data-sync foreground service, and posts a system
+  notification when the operation succeeds or fails. A failed reply restores its
+  draft.
 - Sheets lock background scrolling and keyboard focus. Escape and Android Back
-  close the active sheet before leaving the app; during operations they do not
-  dismiss the progress UI. Task sheets also close on an outside tap.
+  close the active sheet before leaving the app. Task sheets also close on an
+  outside tap.
 - Per-office sprite collapse/expand. Collapsing hides the task list entirely
   and leaves only an employee/attention summary; the choice is persisted in
   local storage.
@@ -59,6 +64,9 @@ android/app/build/outputs/apk/debug/app-debug.apk
 - Direct replies to tmux panes and resumable CLI sessions.
 - Codex replies prefer the newer Codex Desktop binary so paginated Desktop
   threads can resume successfully.
+- If Codex Desktop already owns a thread writer lock, the phone does not force a
+  second writer. It queues the message with `codex queue --thread` so the
+  existing Desktop thread can continue with it after its current turn.
 - A successful process reply returns immediately instead of triggering another
   full discovery scan.
 - Reply operations run in the background and expose network reachability,
@@ -177,6 +185,7 @@ It can send input back:
 
 - tmux task: `tmux send-keys`
 - Codex process: `codex exec resume --skip-git-repo-check`
+- Busy Codex Desktop thread: `codex queue --thread <thread>`
 - Claude process: `claude --resume ... --print`
 
 ## Security notes
