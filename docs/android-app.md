@@ -7,8 +7,8 @@ Linux machines over SSH directly from the phone.
 Current debug version:
 
 ```text
-versionName: 0.5.25
-versionCode: 41
+versionName: 0.5.26
+versionCode: 42
 minSdk: 24
 targetSdk: 35
 package: com.otterview.agentsessionbridge.debug
@@ -53,6 +53,9 @@ android/app/build/outputs/apk/debug/app-debug.apk
   and leaves only an employee/attention summary; the choice is persisted in
   local storage.
 - Private machine/task storage in Android app storage.
+- SSH sockets bind to the active non-VPN Wi-Fi/Ethernet network when one is
+  available. This avoids always-on VPN policies that route the app over a tunnel
+  while blocking raw SSH, while model HTTP traffic keeps the system default.
 - LAN `/24` SSH-port scanner.
 - Native SSH client using `com.github.mwiede:jsch`.
 - Trust-on-first-use SSH host-key pinning.
