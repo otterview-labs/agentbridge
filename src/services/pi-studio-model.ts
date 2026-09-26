@@ -71,6 +71,10 @@ export function createPiModel(config: PiSettings): StudioModel {
               instructions: systemPrompt,
               input: contextFor(input),
               max_output_tokens: 1800,
+              // GLM 5.x spends output tokens on hidden reasoning before the
+              // final message. Low effort keeps planning from exhausting the
+              // cap before it emits any output_text.
+              reasoning: { effort: 'low' },
             }),
             redirect: 'error',
             signal: AbortSignal.timeout(180_000),
