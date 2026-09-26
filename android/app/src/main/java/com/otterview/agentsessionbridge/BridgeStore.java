@@ -52,6 +52,38 @@ final class BridgeStore {
     }
   }
 
+  synchronized JSONObject studioModel() throws Exception {
+    String value = prefs.getString("studio_model", "");
+    return value == null || value.trim().isEmpty()
+        ? new JSONObject() : new JSONObject(value);
+  }
+
+  synchronized void saveStudioModel(JSONObject value) {
+    if (!prefs.edit().putString("studio_model", value.toString()).commit()) {
+      throw new IllegalStateException("模型配置保存失败，请检查手机存储空间");
+    }
+  }
+
+  synchronized JSONArray studioMessages() throws Exception {
+    return new JSONArray(prefs.getString("studio_messages", "[]"));
+  }
+
+  synchronized void saveStudioMessages(JSONArray value) {
+    if (!prefs.edit().putString("studio_messages", value.toString()).commit()) {
+      throw new IllegalStateException("管家对话保存失败，请检查手机存储空间");
+    }
+  }
+
+  synchronized JSONArray studioReports() throws Exception {
+    return new JSONArray(prefs.getString("studio_reports", "[]"));
+  }
+
+  synchronized void saveStudioReports(JSONArray value) {
+    if (!prefs.edit().putString("studio_reports", value.toString()).commit()) {
+      throw new IllegalStateException("任务规划保存失败，请检查手机存储空间");
+    }
+  }
+
   synchronized void saveTasks(JSONArray value) {
     prefs.edit().putString(KEY_TASKS, value.toString()).apply();
   }

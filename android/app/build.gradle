@@ -25,8 +25,8 @@ android {
     applicationId 'com.otterview.agentsessionbridge'
     minSdkVersion 24
     targetSdkVersion 35
-    versionCode 38
-    versionName '0.5.22'
+    versionCode 39
+    versionName '0.5.23'
   }
   if (hasReleaseSigning) {
     signingConfigs {
@@ -57,12 +57,3 @@ android {
 dependencies {
   implementation 'com.github.mwiede:jsch:0.2.26'
 }
-
-// Keep the responsive studio identical on Web and Android.
-tasks.register('syncStudioAssets', Copy) {
-  from(rootProject.file('../public')) {
-    include 'studio.html', 'studio.css', 'studio.js'
-  }
-  into('src/main/assets')
-}
-tasks.named('preBuild').configure { dependsOn('syncStudioAssets') }

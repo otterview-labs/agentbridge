@@ -10,8 +10,9 @@
   待输入和公网管理页，任务可直接跳转原任务详情。
 - Android 构建前的 `syncStudioAssets` 自动从 `public/studio.*` 同步资源，
   不要直接修改 Android 中的这三份生成副本。
-- Android 未连接 Hub 时只显示本机记录，不能调用 Pi。连接后，Web 和手机
-  直接读写同一个 Hub 的对话、记忆和任务规划，不各自维护一份云端副本。
+- 浏览器 Studio 继续使用 Hub 共享对话、记忆和任务规划。Android 原生
+  控制器从 0.5.23 起不再连接 Hub，模型、对话、记忆和任务规划均保存在
+  手机应用私有存储。
 - 在手机「连接与模型」中填写 Hub 根地址和至少 32 位的 API Token，
   点击「测试并连接」。公网必须使用 HTTPS；可信局域网 HTTP 需要明确勾选，
   且不适合公网。电脑的 `127.0.0.1` 不是手机可访问的电脑地址。
@@ -50,8 +51,8 @@ Anthropic 和 OpenRouter 的模型 ID 必须在安装的 Pi provider 目录中�
 权限为 0600。备份和恢复需同时包含数据库与密钥文件，不能只备份数据库。
 丢失密钥会拒绝解密，不会静默生成替代密钥。加密不能抵御已控制 Hub 主机的攻击者。
 所有配置接口要求 Hub 鉴权；密钥不回显，不写入浏览器持久存储。
-手机 Hub Token 由 Android Keystore 加密保存，仅原生网络层使用，
-不会返回给页面 JavaScript。两种连接均拒绝重定向，避免凭据被转发。
+Android 原生控制器不再保存 Hub Token。浏览器 Studio 的 Token 只保存在
+页面内存中。两种连接均拒绝重定向，避免凭据被转发。
 
 尚未保存页面配置时，也可在 Hub 环境中配置并重启：
 
@@ -82,7 +83,8 @@ SSH 密码、私钥、原始终端输出、环境变量或命令行。任务标�
 
 - Hub 将确认偏好与对话保存到 SQLite 的 `studio_memories` /
   `studio_messages`，不伪造 CLI 会话。记忆最多 50 条，每条 500 字。
-- Android 离线模式记忆保存在应用私有 SharedPreferences；连接模式直接保存到 Hub。
+- Android 原生控制器记忆保存在应用私有 SharedPreferences；浏览器 Studio
+  记忆保存到 Hub。
 - 只有用户点击「记住」才写入记忆。删除偏好不会删除旧对话里提过的内容。
 - Hub 为单个可信用户设计：拥有同一个 API Token 的浏览器共享上下文，
   不是不同用户的数据隔离系统。公网部署应使用 HTTPS 和强 API Token。

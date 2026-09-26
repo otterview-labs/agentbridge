@@ -1108,7 +1108,6 @@
 
   function renderPiDetail() {
     const studio = state.studio || {};
-    const hub = studio.hub || {};
     const model = studio.model || { ready: false, label: '' };
     const report = studio.report || {};
     const savedReport = studio.dailyReport && studio.dailyReport.content ? studio.dailyReport : studio.lastReport;
@@ -1193,7 +1192,7 @@
     const modelText = model.label ? model.label.replace(/^Pi\s*[·:-]?\s*/u, '').trim() : '';
     $('piAvatar').replaceChildren(employeeSprite('pi', 2));
     $('piAvatar').appendChild(element('span', 'employeeBubble', attention.length ? `${attention.length} 个待输入` : '管家待命'));
-    $('openCloudFromButler').textContent = hub.connected ? '模型设置' : '连接模型';
+    $('openCloudFromButler').textContent = model.ready ? '模型设置' : '配置模型';
     $('piMeta').textContent = model.ready && modelText ? modelText : '模型未连接';
     $('piSheetTitle').textContent = '管家';
     $('butlerEmployeeName').textContent = attention.length
@@ -1237,9 +1236,9 @@
         $('piMessages').appendChild(row);
       });
     }
-    $('sendPi').disabled = !hub.connected || !model.ready || state.sending || !$('piInput').value.trim();
+    $('sendPi').disabled = !model.ready || state.sending || !$('piInput').value.trim();
     const reportRunning = state.backgroundReports.size > 0;
-    $('generateReport').disabled = !hub.connected || !model.ready || reportRunning;
+    $('generateReport').disabled = !model.ready || reportRunning;
     $('generateReport').textContent = reportRunning ? '规划生成中…' : '重新生成规划';
     requestAnimationFrame(() => {
       const messages = $('piMessages');
@@ -1266,9 +1265,8 @@
 
   function renderCloudState() {
     const studio = state.studio || {};
-    const hub = studio.hub || {};
     const model = studio.model || {};
-    const ready = Boolean(hub.connected && model.ready);
+    const ready = Boolean(model.ready);
     $('cloudState').textContent = ready ? '模型已连接' : '模型未连接';
     $('cloudState').classList.toggle('connected', ready);
   }
@@ -1295,18 +1293,10 @@
     }));
     if (!modelResult.ok) return;
     state.studio = modelResult.data;
+    $('modelApiKey').value = '';
     closeSheet('cloudBackdrop');
     render();
     toast('管家模型配置已保存');
-  }
-
-  async function disconnectCloud() {
-    const result = await call('disconnectStudioHub', '断开管家云端…');
-    if (!result.ok) return;
-    await loadStudio();
-    closeSheet('cloudBackdrop');
-    render();
-    toast('管家云端已断开');
   }
 
   async function sendPiMessage() {
@@ -1960,7 +1950,6 @@
     snapshot: () => ({
       studioLoading: state.studioLoading,
       studioModel: state.studio?.model || null,
-      hub: state.studio?.hub || null,
       view: state.view
     })
   };

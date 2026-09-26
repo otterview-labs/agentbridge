@@ -161,16 +161,6 @@ public final class MainActivity extends Activity {
     });
   }
 
-  void deliverStudioResponse(String id, String response) {
-    runOnUiThread(() -> {
-      if (webView != null && !isFinishing() && !isDestroyed()
-          && "file:///android_asset/studio.html".equals(webView.getUrl())) {
-        webView.evaluateJavascript("window.studioHubResponse && window.studioHubResponse("
-            + org.json.JSONObject.quote(id) + "," + response + ")", null);
-      }
-    });
-  }
-
   void startVoiceRecognition(boolean autoSend) {
     runOnUiThread(() -> {
       pendingVoiceAutoSend = autoSend;
