@@ -48,7 +48,8 @@ async function openPhone(t, options = {}) {
           workSummary: '已完成配置检查，等待确认', controlMode: 'tmux', paneId: '%2' },
         { id: 3, machineId: 2, title: '[Image: original 720x1600, displayed at 360x800. Multiply', agentType: 'codex',
           status: 'idle', workSummary: '最近一次记录：会话空闲', controlMode: 'process' }
-      ]
+      ],
+      deletedTasks: []
     };
     if (options.empty) { data.machines = []; data.tasks = []; }
     if (options.frpStatus) {
@@ -116,6 +117,22 @@ async function openPhone(t, options = {}) {
           data.tasks[0].lastOutput = '最新输出';
         }
         return ok({});
+      },
+      deleteTask: id => {
+        const index = data.tasks.findIndex(task => task.id === id);
+        if (index < 0) return fail('员工不存在');
+        const [task] = data.tasks.splice(index, 1);
+        task.deletedAt = checkedAt;
+        data.deletedTasks.push(task);
+        return ok({ tasks: data.tasks, deletedTasks: data.deletedTasks });
+      },
+      restoreDeletedTask: id => {
+        const index = data.deletedTasks.findIndex(task => task.id === id);
+        if (index < 0) return fail('已删除员工不存在');
+        const [task] = data.deletedTasks.splice(index, 1);
+        delete task.deletedAt;
+        data.tasks.push(task);
+        return ok({ tasks: data.tasks, deletedTasks: data.deletedTasks });
       },
       beginSendPrompt: () => {
         window.sendCount += 1;
@@ -405,6 +422,26 @@ test('unidentified sessions cannot receive a reply', async t => {
   assert.match(await page.locator('#taskMeta').textContent(), /无会话 ID，暂不能回复/);
 });
 
+test('deleted employees move to a separate restorable list', async t => {
+  const page = await openPhone(t);
+  assert.equal(await page.locator('.employee').count(), 3);
+  const dialogs = [];
+  page.on('dialog', dialog => {
+    dialogs.push(dialog.message());
+    dialog.accept();
+  });
+  await page.locator('[data-task-id="1"]').click();
+  await page.locator('#deleteTask').click();
+  await page.waitForFunction(() => document.body.innerText.includes('删除列表'));
+  assert.equal(await page.locator('.employee').count(), 2);
+  assert.equal(await page.locator('.deletedEmployee').count(), 1);
+  assert.match(await page.locator('.deletedEmployee').textContent(), /修复手机版任务状态显示/);
+  assert.equal(dialogs.some(message => message.includes('不会删除机器上的项目、会话记录或文件')), true);
+  await page.locator('.deletedEmployee button', { hasText: '恢复' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.employee').length === 3);
+  assert.equal(await page.locator('.deletedEmployee').count(), 0);
+});
+
 test('butler model is configured directly without a Hub dependency', async t => {
   const page = await openPhone(t, { modelReady: false });
   await page.locator('[data-view="butler"]').click();
@@ -492,4 +529,7 @@ test('discovery collapses duplicate Claude processes and Codex subagents', () =>
   assert.match(source, /"subagent"\.equals\(threadSource\) \|\| !parentThreadId\.isEmpty\(\)/);
   // Renames must survive the stable-key migration from PID to session ID.
   assert.match(source, /oldByExternalSession\.get\(externalSessionId\)/);
+  assert.match(source, /withoutDeletedTasks\(discovered\)/);
+  assert.match(source, /deleteTask\(int id\)/);
+  assert.match(source, /restoreDeletedTask\(int id\)/);
 });

@@ -7,8 +7,8 @@ Linux machines over SSH directly from the phone.
 Current debug version:
 
 ```text
-versionName: 0.5.24
-versionCode: 40
+versionName: 0.5.25
+versionCode: 41
 minSdk: 24
 targetSdk: 35
 package: com.otterview.agentsessionbridge.debug
@@ -65,6 +65,9 @@ android/app/build/outputs/apk/debug/app-debug.apk
 - Multiple Claude processes that reference the same session ID collapse into
   one employee card. The most informative/running process wins, and custom names
   survive the PID-to-session identity migration.
+- Employees can be removed from the active office without deleting remote work.
+  Removed employees stay in a per-office deleted list, are excluded from task
+  planning and normal discovery, and can be restored later.
 - Task aliases and a “waiting for input” list.
 - Direct replies to tmux panes and resumable CLI sessions.
 - Codex replies prefer the newer Codex Desktop binary so paginated Desktop
