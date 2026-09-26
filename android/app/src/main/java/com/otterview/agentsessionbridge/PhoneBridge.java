@@ -474,6 +474,109 @@ final class PhoneBridge {
   }
 
   @JavascriptInterface
+  public String beginDiscoverTasks(int machineId) {
+    try {
+      int operationId = store.nextId();
+      JSONObject operation = new JSONObject()
+          .put("id", operationId)
+          .put("state", "running")
+          .put("phase", "discovery")
+          .put("message", "正在发现员工…")
+          .put("startedAt", System.currentTimeMillis())
+          .put("updatedAt", System.currentTimeMillis());
+      synchronized (operations) {
+        pruneOperations();
+        operations.put(operationId, operation);
+      }
+      Thread worker = new Thread(
+          new DiscoverOperationRunnable(this, machineId, operationId),
+          "agent-bridge-discover-" + operationId);
+      worker.start();
+      return success(new JSONObject().put("operation", operation));
+    } catch (Exception error) {
+      return failure(error);
+    }
+  }
+
+  void discoverTasksOperation(int machineId, int operationId) {
+    try {
+      updateOperation(operationId, "discovery", "正在发现员工…", "");
+      JSONObject result = new JSONObject(discoverTasks(machineId));
+      if (!result.optBoolean("ok")) {
+        throw new IllegalArgumentException(result.optString("error", "发现员工失败"));
+      }
+      updateOperation(operationId, "succeeded", "发现员工完成", "");
+      activity.showTaskNotification("Agent Bridge", "发现员工完成");
+      activity.stopTaskForeground();
+    } catch (Exception error) {
+      try {
+        updateOperation(operationId, "failed", "发现员工失败", "");
+      } catch (Exception ignored) {
+        // The web layer may already have cleared this operation.
+      }
+      try {
+        activity.showTaskNotification("Agent Bridge", "发现员工失败");
+        activity.stopTaskForeground();
+      } catch (Exception ignored) {
+        // The activity can disappear during a background operation.
+      }
+    }
+  }
+
+  @JavascriptInterface
+  public String beginStudioReport(String date) {
+    try {
+      int operationId = store.nextId();
+      JSONObject operation = new JSONObject()
+          .put("id", operationId)
+          .put("state", "running")
+          .put("phase", "report")
+          .put("message", "正在生成任务规划…")
+          .put("startedAt", System.currentTimeMillis())
+          .put("updatedAt", System.currentTimeMillis());
+      synchronized (operations) {
+        pruneOperations();
+        operations.put(operationId, operation);
+      }
+      Thread worker = new Thread(
+          new ReportOperationRunnable(this, date, operationId),
+          "agent-bridge-report-" + operationId);
+      worker.start();
+      return success(new JSONObject().put("operation", operation));
+    } catch (Exception error) {
+      return failure(error);
+    }
+  }
+
+  void studioReportOperation(String date, int operationId) {
+    try {
+      updateOperation(operationId, "report", "正在生成任务规划…", "");
+      JSONObject result = new JSONObject(generateStudioReport(date));
+      if (!result.optBoolean("ok")) {
+        throw new IllegalArgumentException(result.optString("error", "任务规划生成失败"));
+      }
+      JSONObject studio = result.optJSONObject("data");
+      updateOperation(operationId, "succeeded", "任务规划已生成", "", studio);
+      activity.showTaskNotification("Agent Bridge", "任务规划已生成");
+      activity.stopTaskForeground();
+    } catch (Exception error) {
+      String message = error.getMessage() == null
+          ? error.getClass().getSimpleName() : error.getMessage();
+      try {
+        updateOperation(operationId, "failed", message, "");
+      } catch (Exception ignored) {
+        // The web layer may already have cleared this operation.
+      }
+      try {
+        activity.showTaskNotification("Agent Bridge", "任务规划生成失败");
+        activity.stopTaskForeground();
+      } catch (Exception ignored) {
+        // The activity can disappear during a background operation.
+      }
+    }
+  }
+
+  @JavascriptInterface
   public String networkStatus(int machineId) {
     try {
       return success(networkStatusForMachine(machineId));
@@ -724,7 +827,7 @@ final class PhoneBridge {
             + "type = \"stcp\"\n"
             + "secretKey = " + tomlString(relay.getString("secretKey")) + "\n"
             + "localIP = \"127.0.0.1\"\n"
-            + "localPort = " + machine.getInt("port") + "\n";
+            + "localPort = 22\n";
         run(targetSession, buildFrpcInstaller(server, relay.getString("proxyName"), targetConfig), 300_000);
 
         disconnect(serverSession);
@@ -873,12 +976,18 @@ final class PhoneBridge {
           JSONObject task = result.optJSONObject("data") == null
               ? null : result.optJSONObject("data").optJSONObject("task");
           updateOperation(operationId, "succeeded", "回复已发送", network, task);
+          activity.showTaskNotification("Agent Bridge", "后台任务已执行");
+          activity.stopTaskForeground();
         } catch (Exception error) {
           try {
             JSONObject current = operationById(operationId);
             updateOperation(operationId, "failed",
                 error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage(),
                 current == null ? "" : current.optJSONObject("network"));
+            String message = error.getMessage() == null
+                ? error.getClass().getSimpleName() : error.getMessage();
+            activity.showTaskNotification("Agent Bridge", message);
+            activity.stopTaskForeground();
           } catch (Exception ignored) {
             // The operation may already have been cleared.
           }
@@ -1108,6 +1217,62 @@ final class PhoneBridge {
   }
 
   @JavascriptInterface
+  public String beginTailTask(int taskId) {
+    try {
+      JSONObject task = store.task(taskId);
+      int operationId = store.nextId();
+      JSONObject operation = new JSONObject()
+          .put("id", operationId)
+          .put("state", "running")
+          .put("phase", "tail")
+          .put("message", "正在刷新任务输出…")
+          .put("taskId", taskId)
+          .put("stableKey", task.optString("stableKey", ""))
+          .put("machineId", task.getInt("machineId"))
+          .put("startedAt", System.currentTimeMillis())
+          .put("updatedAt", System.currentTimeMillis());
+      synchronized (operations) {
+        pruneOperations();
+        operations.put(operationId, operation);
+      }
+      Thread worker = new Thread(
+          new TailOperationRunnable(this, taskId, operationId),
+          "agent-bridge-tail-" + operationId);
+      worker.start();
+      return success(new JSONObject().put("operation", operation));
+    } catch (Exception error) {
+      return failure(error);
+    }
+  }
+
+  void tailTaskOperation(int taskId, int operationId) {
+    try {
+      updateOperation(operationId, "tail", "正在刷新任务输出…", "");
+      JSONObject result = new JSONObject(tailTask(taskId));
+      if (!result.optBoolean("ok")) {
+        throw new IllegalArgumentException(result.optString("error", "刷新任务输出失败"));
+      }
+      updateOperation(operationId, "succeeded", "任务输出已刷新", "");
+      activity.showTaskNotification("Agent Bridge", "任务输出已刷新");
+      activity.stopTaskForeground();
+    } catch (Exception error) {
+      String message = error.getMessage() == null
+          ? error.getClass().getSimpleName() : error.getMessage();
+      try {
+        updateOperation(operationId, "failed", message, "");
+      } catch (Exception ignored) {
+        // The web layer may already have cleared this operation.
+      }
+      try {
+        activity.showTaskNotification("Agent Bridge", message);
+        activity.stopTaskForeground();
+      } catch (Exception ignored) {
+        // The activity can disappear during a background operation.
+      }
+    }
+  }
+
+  @JavascriptInterface
   public String tailTask(int id) {
     try {
       JSONObject task = store.task(id);
@@ -1152,8 +1317,13 @@ final class PhoneBridge {
                 + " && { codex_bin='/Applications/ChatGPT.app/Contents/Resources/codex'; "
                 + "if [ ! -x \"$codex_bin\" ]; then codex_bin=\"$HOME/.codex/plugins/.plugin-appserver/codex\"; fi; "
                 + "if [ ! -x \"$codex_bin\" ]; then codex_bin=$(command -v codex); fi; "
-                + "\"$codex_bin\" exec resume --skip-git-repo-check "
-                + shellQuote(sessionId) + " " + shellQuote(value) + "; }";
+                + "thread=" + shellQuote(sessionId) + " message=" + shellQuote(value) + "; "
+                + "err=$(mktemp); trap 'rm -f \"$err\"' EXIT; "
+                + "if \"$codex_bin\" exec resume --skip-git-repo-check \"$thread\" \"$message\" 2>\"$err\"; then exit 0; fi; "
+                + "if grep -Eq 'thread-store conflict|already has an active writer' \"$err\"; then "
+                + "printf '__ASB_CODEX_QUEUED__\\n'; cat \"$err\" >&2; "
+                + "\"$codex_bin\" queue --thread \"$thread\" --message \"$message\"; exit $?; fi; "
+                + "cat \"$err\" >&2; exit 1; }";
           } else if ("claude-code".equals(task.optString("agentType"))) {
             command = "cd " + shellQuote(task.getString("workspacePath"))
                 + " && claude --resume "
@@ -1163,7 +1333,7 @@ final class PhoneBridge {
           }
           String output = run(session, command, 180_000);
           task.put("lastOutput", "回复执行完成：\n" + output)
-              .put("status", "idle")
+              .put("status", output.contains("__ASB_CODEX_QUEUED__") ? "running" : "idle")
               .put("requiredInput", "")
               .put("suggestedReply", "")
               .put("updatedAt", now());
@@ -1976,8 +2146,7 @@ final class PhoneBridge {
       if (exit != 0) {
         String error = new String(stderr.toByteArray(), StandardCharsets.UTF_8).trim();
         if (error.length() > 1500) error = error.substring(error.length() - 1500);
-        throw new IllegalArgumentException("远程命令失败(" + exit + ")" + stage + "："
-            + (error.isEmpty() ? "命令未输出错误详情，请检查远程服务日志" : error));
+        throw new IllegalArgumentException(friendlyRemoteError(error, exit, stage));
       }
       String value = new String(stdout.toByteArray(), StandardCharsets.UTF_8);
       if (value.length() > MAX_OUTPUT) value = value.substring(0, MAX_OUTPUT);
@@ -2306,6 +2475,20 @@ final class PhoneBridge {
 
   private static String shellQuote(String value) {
     return "'" + value.replace("'", "'\\''") + "'";
+  }
+
+  private static String friendlyRemoteError(String error, int exit, String stage) {
+    if (error != null) {
+      if (error.contains("thread-store conflict") || error.contains("already has an active writer")) {
+        return "这个 Codex 员工正被桌面端占用，手机不能同时接管；请等它完成或关闭桌面会话后再发送。";
+      }
+      if (error.contains("no rollout found for thread id") || error.contains("session not found")) {
+        return "这个 Codex 员工的会话记录已经不存在，可能是临时会话或记录被清理；请点“找任务”刷新后再选择。";
+      }
+    }
+    String detail = error == null ? "" : error.trim();
+    if (detail.isEmpty()) detail = "命令未输出错误详情，请检查远程服务日志";
+    return "远程命令失败(" + exit + ")" + stage + "：" + detail;
   }
 
   private static String now() {

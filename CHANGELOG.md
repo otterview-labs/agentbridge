@@ -9,6 +9,20 @@ Notable changes to agentBridge are documented here.
 - Public contribution, support, and security documentation.
 - CI and dependency-update automation.
 - Security regression coverage for configuration, terminal classification, and workspace path containment.
+- Android 0.5.22 background operations for employee discovery, task replies,
+  output refresh, and task planning, with a foreground service and system
+  success/failure notifications.
+- Android background operation counters, restore-on-failure reply drafts, and
+  a clearer question/answer task timeline.
+- Android task planning copy that leads with actionable one-sentence items.
+- Queue fallback for Codex Desktop threads that already have an active writer.
+
+### Changed
+
+- Android now reports missing Codex rollouts and busy writer locks as specific
+  user actions instead of a generic remote-command failure.
+- Android relays target the local SSH service when deploying an STCP client,
+  allowing a public SSH endpoint to differ from the target machine's local port.
 
 ### Changed
 

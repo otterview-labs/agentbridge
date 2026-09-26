@@ -16,6 +16,7 @@
       </div>
     </div>
     <div class="topActions">
+      <button class="cloudState" id="backgroundState" type="button">后台</button>
       <button class="cloudState" id="cloudState" type="button">未连接</button>
       <button class="iconButton" id="refreshAll" title="刷新">⟳</button>
     </div>
@@ -63,15 +64,15 @@
       <section class="butlerSection aiSummarySection">
         <header>
           <div>
-            <h3>今日与明日</h3>
+            <h3>任务规划</h3>
             <small id="butlerReportMeta">AI 总结</small>
           </div>
-          <div class="planModeToggle" role="group" aria-label="今日与明日视图">
+          <div class="planModeToggle" role="group" aria-label="任务规划视图">
             <button type="button" data-plan-mode="ai" class="active">AI 总结</button>
             <button type="button" data-plan-mode="records">原始记录</button>
           </div>
         </header>
-        <button class="smallAction dark reportRefresh" id="generateReport" type="button">重新生成日报</button>
+        <button class="smallAction dark reportRefresh" id="generateReport" type="button">重新生成规划</button>
         <p class="aiSummary" id="butlerAiSummary">尚未生成今日总结。</p>
         <div class="dayGroup" aria-label="今日">
           <span>今日</span>
@@ -201,8 +202,11 @@
     <div class="taskStatusLine" id="taskStatusLine"></div>
     <div class="taskBody">
       <p class="taskNeed hidden" id="taskNeed"></p>
-      <section class="workSummary" id="workSummary"></section>
-      <pre class="output" id="taskOutput"></pre>
+      <section class="conversationTimeline" id="conversationTimeline" aria-label="最近问答"></section>
+      <details class="rawRecord" id="rawRecord">
+        <summary>查看原始记录</summary>
+        <pre class="output" id="taskOutput"></pre>
+      </details>
       <label class="replyLabel">回复此会话<textarea id="replyText" rows="4" placeholder="写下指令或需要补充的信息"></textarea></label>
       <div class="taskActions">
         <button class="ghostAction" id="renameTask">改名</button>
@@ -217,25 +221,20 @@
   <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="cloudSheetTitle">
     <header>
       <div>
-        <p class="eyebrow">管家 · 云端</p>
-        <h2 id="cloudSheetTitle">云端与模型</h2>
+        <p class="eyebrow">管家 · 模型</p>
+        <h2 id="cloudSheetTitle">管家模型</h2>
       </div>
       <button class="iconButton subtle" data-close="cloudBackdrop" aria-label="关闭云端设置">✕</button>
     </header>
     <form id="cloudForm">
-      <label>Hub 地址<input id="cloudUrl" type="url" placeholder="https://hub.example.com" required></label>
-      <label>Hub Token<input id="cloudToken" type="password" autocomplete="off" placeholder="已连接时可留空"></label>
-      <label class="checkRow"><input id="cloudShare" type="checkbox" checked>同步这台手机的任务记录</label>
-      <label class="checkRow"><input id="cloudHttp" type="checkbox">允许局域网 HTTP</label>
       <div class="modelFields">
         <p class="formNote">管家模型 · OpenAI 格式</p>
-        <label>Base URL<input id="modelBaseUrl" type="url" placeholder="https://api.example.com/v1"></label>
-        <label>Model<input id="modelId" placeholder="glm-4.6 / gpt-4o-mini / qwen-max"></label>
+        <label>Base URL<input id="modelBaseUrl" type="url" placeholder="https://api.z.ai/api/v1" required></label>
+        <label>Model<input id="modelId" placeholder="glm-5.3" required></label>
         <label>API Key<input id="modelApiKey" type="password" autocomplete="off" placeholder="已保存时可不填"></label>
       </div>
-      <p class="formNote">Hub Token 保存在手机 Android Keystore；模型密钥由 Hub 加密保存，不会出现在页面状态里。</p>
-      <button class="primaryAction wide" type="submit">连接云端与模型</button>
-      <button class="ghostAction wide" type="button" id="disconnectCloud">断开连接</button>
+      <p class="formNote">API Key 只加密保存在本机服务中，不会显示在页面状态里。</p>
+      <button class="primaryAction wide" type="submit">保存模型配置</button>
     </form>
   </section>
 </div>

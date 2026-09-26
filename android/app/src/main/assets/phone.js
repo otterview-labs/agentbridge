@@ -12,6 +12,11 @@
     view: 'offices',
     currentTaskId: null,
     drafts: new Map(),
+    backgroundSends: new Map(),
+    backgroundDiscovers: new Map(),
+    backgroundTails: new Map(),
+    backgroundReports: new Map(),
+    backgroundNotices: [],
     sending: false,
     authType: 'password',
     frpAuthType: 'password',
@@ -33,10 +38,10 @@
   });
   $('attentionCount').addEventListener('click', () => selectView('todo'));
   $('cloudState').addEventListener('click', openCloudSheet);
+  $('backgroundState').addEventListener('click', showBackgroundJobs);
   $('openCloudFromButler').addEventListener('click', openCloudSheet);
   $('refreshButler').addEventListener('click', () => void loadStudio());
   $('cloudForm').addEventListener('submit', saveCloudConnection);
-  $('disconnectCloud').addEventListener('click', disconnectCloud);
   $('sendPi').addEventListener('click', sendPiMessage);
   $('generateReport').addEventListener('click', generateTodayReport);
   if (window.PointerEvent) {
@@ -302,10 +307,99 @@
     await loadState();
   }
 
-  async function discoverMachine(id) {
-    const result = await call('discoverTasks', '正在发现任务员工…', id);
-    if (!await loadState()) return;
-    if (result.ok) toast('已同步当前任务');
+  function discoverMachine(id) {
+    if (state.backgroundDiscovers.has(id)) {
+      toast('这间办公室正在发现员工，完成后会通知你');
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(AgentBridge.beginDiscoverTasks(id));
+    } catch (error) {
+      parsed = { ok: false, error: '无法提交发现员工任务' };
+    }
+    if (!parsed.ok) {
+      toast(parsed.error || '无法提交发现员工任务');
+      return;
+    }
+    const machine = state.machines.find(item => item.id === id);
+    const operation = parsed.data.operation;
+    state.backgroundDiscovers.set(id, {
+      operation,
+      machineName: machine ? machine.name : `机器 ${id}`,
+      message: '正在发现员工…',
+      startedAt: operation.startedAt || Date.now()
+    });
+    try { AgentBridge.startTaskForeground(); } catch (error) { /* Discovery still runs in its native thread. */ }
+    renderOffices();
+    renderBackgroundState();
+    toast('发现员工已提交后台，完成后会通知你');
+    void pollBackgroundDiscover(id, operation);
+  }
+
+  async function pollBackgroundDiscover(machineId, startedOperation) {
+    try {
+      for (;;) {
+        await sleep(1000);
+        const entry = state.backgroundDiscovers.get(machineId);
+        if (!entry || entry.operation.id !== startedOperation.id) return;
+        let parsed;
+        try {
+          parsed = JSON.parse(AgentBridge.operationState(startedOperation.id));
+        } catch (error) {
+          parsed = { ok: false, error: '无法读取发现员工状态' };
+        }
+        if (!parsed.ok) throw new Error(parsed.error || '无法读取发现员工状态');
+        const operation = parsed.data.operation;
+        entry.operation = operation;
+        entry.message = operation.message || '正在发现员工…';
+        renderOffices();
+        renderBackgroundState();
+        if (operation.state === 'failed') throw new Error(operation.message || '发现员工失败');
+        if (operation.state !== 'running') break;
+      }
+      await loadStateQuiet();
+      const entry = state.backgroundDiscovers.get(machineId);
+      const machineName = entry ? entry.machineName : `机器 ${machineId}`;
+      finishBackgroundDiscover(machineId, true, `${machineName} 已完成员工发现`);
+    } catch (error) {
+      const entry = state.backgroundDiscovers.get(machineId);
+      const machineName = entry ? entry.machineName : `机器 ${machineId}`;
+      finishBackgroundDiscover(machineId, false, `${machineName} 发现失败：${error.message || String(error)}`);
+    }
+  }
+
+  function finishBackgroundDiscover(machineId, succeeded, message) {
+    const entry = state.backgroundDiscovers.get(machineId);
+    const operation = entry ? entry.operation : null;
+    state.backgroundDiscovers.delete(machineId);
+    if (operation) {
+      try { AgentBridge.clearOperation(operation.id); } catch (error) { /* already cleared */ }
+    }
+    addBackgroundNotice(succeeded ? 'success' : 'error', message);
+    try { AgentBridge.showTaskNotification('Agent Bridge', message); } catch (error) { /* Native completion also notifies. */ }
+    try { AgentBridge.stopTaskForeground(); } catch (error) { /* Native completion also stops it. */ }
+    toast(message);
+    render();
+    renderBackgroundState();
+  }
+
+  async function loadStateQuiet() {
+    let parsed;
+    try {
+      parsed = JSON.parse(AgentBridge.state());
+    } catch (error) {
+      parsed = { ok: false, error: '读取本机数据失败' };
+    }
+    if (!parsed.ok) return false;
+    const data = parsed.data;
+    state.machines = data.machines || [];
+    state.tasks = data.tasks || [];
+    state.frpServer = data.frpServer || null;
+    state.frpRelays = data.frpRelays || [];
+    state.networkHint = data.networkHint || '';
+    render();
+    return true;
   }
 
   async function editMachine(id) {
@@ -335,8 +429,10 @@
 
   function renderTaskDetail() {
     const task = currentTask();
-    $('sendTask').disabled = !task || state.sending;
-    $('tailTask').disabled = !task;
+    const background = task ? state.backgroundSends.get(task.id) : null;
+    const tailing = task ? state.backgroundTails.get(task.id) : null;
+    $('sendTask').disabled = !task || Boolean(background) || Boolean(tailing);
+    $('tailTask').disabled = !task || Boolean(tailing);
     $('renameTask').disabled = !task;
     if (!task) {
       $('taskStatusLine').textContent = '本次未发现此会话，以下为上次记录';
@@ -346,8 +442,8 @@
     $('taskAvatar').className = 'taskAvatarWrap';
     $('taskAvatar').replaceChildren(employeeSprite(task.agentType, Number(String(task.id).replace(/\D/g, '')) % 3));
     const resumable = task.controlMode === 'process' ? task.externalSessionId : task.paneId;
-    $('sendTask').disabled = !resumable || state.sending;
-    $('taskMeta').textContent = `${agentNames[task.agentType] || task.agentType} · ${task.controlMode === 'process' ? '恢复会话' : 'tmux'} · ${resumable ? '可回复' : '待识别'}`;
+    $('sendTask').disabled = !resumable || Boolean(background) || Boolean(tailing);
+    $('taskMeta').textContent = `${agentNames[task.agentType] || task.agentType} · ${task.controlMode === 'process' ? '恢复会话' : 'tmux'} · ${background ? '后台执行中' : tailing ? '后台刷新中' : resumable ? '可回复' : '无会话 ID，暂不能回复'}`;
     $('taskTitle').textContent = task.title;
     const machine = state.machines.find((item) => item.id === task.machineId);
     $('taskStatusLine').textContent = [
@@ -355,11 +451,130 @@
       machine ? `${machine.name} · ${machineCheckText(machine)}` : '机器记录不存在',
       task.workspacePath
     ].filter(Boolean).join(' · ');
-    $('workSummary').textContent = task.workSummary || task.requiredInput || '暂未读取到详细工作摘要。';
     $('taskNeed').textContent = task.requiredInput
       ? `${isRecordedTask(task) ? '上次待确认' : '需要你确认'}：${task.requiredInput}` : '';
     $('taskNeed').classList.toggle('hidden', !task.requiredInput);
+    renderConversationTimeline(task);
     $('taskOutput').textContent = task.lastOutput || '暂无输出';
+  }
+
+  function renderConversationTimeline(task) {
+    const container = $('conversationTimeline');
+    container.replaceChildren();
+    const turns = conversationTurns(task);
+    const header = element('div', 'conversationHeader');
+    header.appendChild(element('strong', '', turns.length > 1 ? '最近问答' : '最新记录'));
+    header.appendChild(element('small', '', isRecordedTask(task) ? '上次同步记录' : '来自当前会话'));
+    container.appendChild(header);
+
+    if (!turns.length) {
+      const empty = element('div', 'conversationEmpty');
+      empty.appendChild(element('strong', '', '还没有可读的问答'));
+      empty.appendChild(element('span', '', '可以先发送一条指令，或点击“刷新输出”。'));
+      container.appendChild(empty);
+      return;
+    }
+
+    turns.forEach((turn, index) => {
+      const row = element('article', `conversationTurn ${turn.role}`);
+      const meta = element('div', 'conversationMeta');
+      meta.appendChild(element('strong', '', turn.title));
+      meta.appendChild(element('span', '', turn.label));
+      const body = element('div', 'conversationBody');
+      appendFormattedConversationText(body, turn.text);
+      row.appendChild(meta);
+      row.appendChild(body);
+      if (turn.footer) row.appendChild(element('small', 'conversationFooter', turn.footer));
+      container.appendChild(row);
+      if (index === turns.length - 1) return;
+    });
+  }
+
+  function conversationTurns(task) {
+    const summary = String(task.workSummary || '');
+    const output = String(task.lastOutput || '');
+    const user = conversationLabeled(output, ['最近指令', '最近用户', '最近提问'])
+      || conversationLabeled(summary, ['最近指令', '最近用户', '最近提问']);
+    const assistant = conversationLabeled(output, ['最近输出', '最近回复', '最近结果'])
+      || conversationLabeled(summary, ['最近输出', '最近回复', '最近结果']);
+    const turns = [];
+    if (user) {
+      turns.push({
+        role: 'user',
+        title: '我问',
+        label: '最近指令',
+        text: user,
+        footer: '发送后会进入同一个会话'
+      });
+    }
+    if (assistant) {
+      turns.push({
+        role: 'assistant',
+        title: agentNames[task.agentType] || '员工',
+        label: task.status === 'running' ? '最新进展' : '最近回复',
+        text: assistant,
+        footer: task.status === 'running' ? '会话仍在执行，内容可能继续变化' : ''
+      });
+    }
+    if (!turns.length && output) {
+      turns.push({
+        role: 'system',
+        title: '会话记录',
+        label: '技术输出',
+        text: output,
+        footer: '已保留原始格式'
+      });
+    }
+    if (!turns.length && task.requiredInput) {
+      turns.push({
+        role: 'assistant',
+        title: '等待确认',
+        label: '需要你处理',
+        text: task.requiredInput,
+        footer: ''
+      });
+    }
+    return turns.map(turn => ({ ...turn, text: cleanConversationText(turn.text) })).filter(turn => turn.text);
+  }
+
+  function conversationLabeled(source, labels) {
+    const text = String(source || '');
+    for (const label of labels) {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = new RegExp(`${escaped}\\s*[:：]\\s*([\\s\\S]*?)(?=\\n(?:最近指令|最近用户|最近提问|最近输出|最近回复|最近结果)\\s*[:：]|$)`, 'u').exec(text);
+      if (match?.[1]?.trim()) return match[1].trim();
+    }
+    return '';
+  }
+
+  function cleanConversationText(value) {
+    return String(value || '')
+      .replace(/\r\n?/gu, '\n')
+      .replace(/\[Image:[^\]]*\]/giu, '［图片］')
+      .replace(/\[Audio:[^\]]*\]/giu, '［音频］')
+      .replace(/!\[[^\]]*\]\([^)]*\)/gu, '［图片］')
+      .replace(/<command-name>[\s\S]*?<\/command-name>/giu, '')
+      .replace(/<command-args>[\s\S]*?<\/command-args>/giu, '')
+      .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/giu, '')
+      .replace(/\n{3,}/gu, '\n\n')
+      .trim();
+  }
+
+  function appendFormattedConversationText(container, value) {
+    const parts = String(value || '').split(/```/u);
+    parts.forEach((part, index) => {
+      if (!part.trim()) return;
+      if (index % 2 === 1) {
+        const newline = part.indexOf('\n');
+        const body = newline >= 0 ? part.slice(newline + 1) : part;
+        const node = element('pre', 'conversationCode');
+        node.textContent = body.trim();
+        container.appendChild(node);
+      } else {
+        container.appendChild(element('span', '', part.trim()));
+      }
+    });
+    if (!container.childElementCount) container.appendChild(element('span', '', '（空内容）'));
   }
 
   async function renameCurrentTask() {
@@ -372,62 +587,240 @@
     }
   }
 
-  async function refreshCurrentTask() {
-    if (!state.currentTaskId) return;
-    await call('tailTask', '刷新任务输出…', state.currentTaskId);
-    await loadState();
+  function refreshCurrentTask() {
+    const task = currentTask();
+    if (!task) return;
+    if (state.backgroundTails.has(task.id)) {
+      toast('这个任务输出正在后台刷新，完成后会通知你');
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(AgentBridge.beginTailTask(task.id));
+    } catch (error) {
+      parsed = { ok: false, error: '无法提交后台刷新' };
+    }
+    if (!parsed.ok) {
+      toast(parsed.error || '无法提交后台刷新');
+      return;
+    }
+    const operation = parsed.data.operation;
+    state.backgroundTails.set(task.id, {
+      operation,
+      machineId: task.machineId,
+      stableKey: task.stableKey || operation.stableKey || '',
+      taskName: compactTaskTitle(task),
+      message: '正在刷新任务输出…',
+      startedAt: operation.startedAt || Date.now()
+    });
+    try { AgentBridge.startTaskForeground(); } catch (error) { /* Native refresh still runs in its own thread. */ }
+    renderTaskDetail();
+    renderBackgroundState();
+    toast('刷新输出已提交后台，完成后会通知你');
+    void pollBackgroundTail(task.id, operation);
+  }
+
+  async function pollBackgroundTail(taskId, startedOperation) {
+    try {
+      for (;;) {
+        await sleep(1000);
+        const entry = state.backgroundTails.get(taskId);
+        if (!entry || entry.operation.id !== startedOperation.id) return;
+        let parsed;
+        try {
+          parsed = JSON.parse(AgentBridge.operationState(startedOperation.id));
+        } catch (error) {
+          parsed = { ok: false, error: '无法读取后台刷新状态' };
+        }
+        if (!parsed.ok) throw new Error(parsed.error || '无法读取后台刷新状态');
+        const operation = parsed.data.operation;
+        entry.operation = operation;
+        entry.message = operation.message || '正在刷新任务输出…';
+        renderTaskDetail();
+        renderBackgroundState();
+        if (operation.state === 'failed') throw new Error(operation.message || '刷新任务输出失败');
+        if (operation.state !== 'running') break;
+      }
+      const entry = state.backgroundTails.get(taskId);
+      const stableKey = entry ? entry.stableKey : '';
+      const machineId = entry ? entry.machineId : 0;
+      await loadStateQuiet();
+      let nextTask = state.tasks.find(item => item.id === taskId);
+      if (!nextTask && stableKey) {
+        nextTask = state.tasks.find(item => item.machineId === machineId && item.stableKey === stableKey);
+      }
+      if (nextTask && nextTask.id !== taskId) {
+        if (state.currentTaskId === taskId) state.currentTaskId = nextTask.id;
+        if (state.drafts.has(taskId)) {
+          state.drafts.set(nextTask.id, state.drafts.get(taskId));
+          state.drafts.delete(taskId);
+        }
+      }
+      const title = nextTask ? compactTaskTitle(nextTask) : (entry ? entry.taskName : `任务 ${taskId}`);
+      finishBackgroundTail(taskId, true, `${title} 输出已刷新`);
+    } catch (error) {
+      const entry = state.backgroundTails.get(taskId);
+      const title = entry ? entry.taskName : `任务 ${taskId}`;
+      finishBackgroundTail(taskId, false, `${title} 刷新失败：${error.message || String(error)}`);
+    }
+  }
+
+  function finishBackgroundTail(taskId, succeeded, message) {
+    const entry = state.backgroundTails.get(taskId);
+    const operation = entry ? entry.operation : null;
+    state.backgroundTails.delete(taskId);
+    if (operation) {
+      try { AgentBridge.clearOperation(operation.id); } catch (error) { /* already cleared */ }
+    }
+    addBackgroundNotice(succeeded ? 'success' : 'error', message);
+    try { AgentBridge.showTaskNotification('Agent Bridge', message); } catch (error) { /* Native completion also notifies. */ }
+    try { AgentBridge.stopTaskForeground(); } catch (error) { /* Native completion also stops it. */ }
+    toast(message);
+    renderTaskDetail();
+    renderBackgroundState();
   }
 
   async function sendCurrentTask() {
-    if (!state.currentTaskId || !currentTask() || state.sending) return;
+    if (!state.currentTaskId || !currentTask()) return;
+    const task = currentTask();
+    if (state.backgroundSends.has(task.id)) {
+      toast('这个任务已在后台执行，完成后会通知你');
+      return;
+    }
     const value = $('replyText').value.trim();
     if (!value) {
       toast('先输入要发送回会话的内容');
       return;
     }
-    const taskId = state.currentTaskId;
-    state.sending = true;
-    $('sendTask').disabled = true;
-    let operation;
+
+    let parsed;
     try {
-      const begin = await call('beginSendPrompt', '正在发送回原会话…', taskId, value, 'android');
-      if (!begin.ok) return;
-      operation = begin.data.operation;
-      while (true) {
+      parsed = JSON.parse(AgentBridge.beginSendPrompt(task.id, value, 'android'));
+    } catch (error) {
+      parsed = { ok: false, error: '无法提交后台任务' };
+    }
+    if (!parsed.ok) {
+      toast(parsed.error || '无法提交后台任务');
+      return;
+    }
+
+    const operation = parsed.data.operation;
+    state.backgroundSends.set(task.id, {
+      operation,
+      message: '已提交，正在检查网络…',
+      network: null,
+      prompt: value,
+      startedAt: operation.startedAt || Date.now()
+    });
+    // Submission is accepted. Keep the draft empty to avoid an accidental duplicate.
+    state.drafts.set(task.id, '');
+    if (state.currentTaskId === task.id) $('replyText').value = '';
+    try { AgentBridge.startTaskForeground(); } catch (error) { /* Android-level background is best effort. */ }
+    renderTaskDetail();
+    renderBackgroundState();
+    toast('已提交后台执行，成功或失败会通知你');
+    void pollBackgroundSend(task.id, operation);
+  }
+
+  async function pollBackgroundSend(taskId, startedOperation) {
+    try {
+      for (;;) {
+        await sleep(1000);
+        const currentEntry = state.backgroundSends.get(taskId);
+        if (!currentEntry || currentEntry.operation.id !== startedOperation.id) return;
+
         let parsed;
         try {
-          parsed = JSON.parse(AgentBridge.operationState(operation.id));
+          parsed = JSON.parse(AgentBridge.operationState(startedOperation.id));
         } catch (error) {
-          parsed = { ok: false, error: '无法读取发送状态' };
+          parsed = { ok: false, error: '无法读取后台任务状态' };
         }
-        if (!parsed.ok) throw new Error(parsed.error || '无法读取发送状态');
-        const current = parsed.data.operation;
-        showBusy(current.message, (current.network || {}).summary || '');
-        updateBusyElapsed(operation.startedAt);
-        if (current.state !== 'running') {
-          if (current.state === 'failed') throw new Error(current.message || '回复失败');
-          break;
-        }
-        await sleep(500);
+        if (!parsed.ok) throw new Error(parsed.error || '无法读取后台任务状态');
+
+        const operation = parsed.data.operation;
+        currentEntry.operation = operation;
+        currentEntry.message = operation.message || '后台执行中…';
+        currentEntry.network = operation.network || null;
+        if (state.currentTaskId === taskId) renderTaskDetail();
+        renderBackgroundState();
+        if (operation.state === 'failed') throw new Error(operation.message || '任务执行失败');
+        if (operation.state !== 'running') break;
       }
-      // A confirmed send must not leave a resendable draft if reloading records fails.
-      state.drafts.set(taskId, '');
-      $('replyText').value = '';
-      if (!await loadState()) {
-        toast('回复已发送，记录读取失败，请刷新后查看');
-        return;
+
+      const entry = state.backgroundSends.get(taskId);
+      const operation = entry ? entry.operation : startedOperation;
+      const updatedTask = operation.task;
+      if (updatedTask && updatedTask.id === taskId) {
+        const index = state.tasks.findIndex(item => item.id === taskId);
+        if (index >= 0) state.tasks[index] = updatedTask;
       }
-      toast('已发送');
+      finishBackgroundSend(taskId, true, updatedTask ? `任务已执行：${compactTaskTitle(updatedTask)}` : '后台任务已执行');
     } catch (error) {
-      toast(error.message || String(error));
-    } finally {
-      if (operation) {
-        try { AgentBridge.clearOperation(operation.id); } catch (error) { /* operation already cleared */ }
-      }
-      state.sending = false;
-      renderTaskDetail();
-      hideBusy();
+      finishBackgroundSend(taskId, false, error.message || String(error));
     }
+  }
+
+  function finishBackgroundSend(taskId, succeeded, message) {
+    const entry = state.backgroundSends.get(taskId);
+    const operation = entry ? entry.operation : null;
+    state.backgroundSends.delete(taskId);
+    if (operation) {
+      try { AgentBridge.clearOperation(operation.id); } catch (error) { /* already cleared */ }
+    }
+    if (!succeeded && entry && entry.prompt) {
+      state.drafts.set(taskId, entry.prompt);
+      if (state.currentTaskId === taskId) $('replyText').value = entry.prompt;
+    }
+    addBackgroundNotice(succeeded ? 'success' : 'error', message);
+    try { AgentBridge.showTaskNotification('Agent Bridge', message); } catch (error) { /* Native completion also notifies. */ }
+    try { AgentBridge.stopTaskForeground(); } catch (error) { /* Native completion also stops it. */ }
+    toast(message);
+    if (navigator.vibrate) {
+      try { navigator.vibrate(succeeded ? [80, 60, 80] : [160, 80, 160]); } catch (error) { /* optional */ }
+    }
+    render();
+    renderBackgroundState();
+  }
+
+  function addBackgroundNotice(kind, message) {
+    const time = new Date();
+    state.backgroundNotices.unshift({
+      kind,
+      message,
+      time: `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+    });
+    state.backgroundNotices = state.backgroundNotices.slice(0, 20);
+  }
+
+  function showBackgroundJobs() {
+    const running = [
+      ...[...state.backgroundSends.entries()].map(([taskId, entry]) => {
+        const task = state.tasks.find(item => item.id === taskId);
+        return `${entry.message}\n${task ? compactTaskTitle(task) : `任务 ${taskId}`}`;
+      }),
+      ...[...state.backgroundDiscovers.values()].map(entry => `${entry.message}\n${entry.machineName}`),
+      ...[...state.backgroundTails.values()].map(entry => `${entry.message}\n${entry.taskName}`),
+      ...[...state.backgroundReports.entries()].map(([date, entry]) => `${entry.message}\n${date}`)
+    ];
+    const notices = state.backgroundNotices.map(item => `${item.time} ${item.kind === 'success' ? '✅' : '❌'} ${item.message}`);
+    if (!running.length && !notices.length) {
+      toast('当前没有后台任务');
+      return;
+    }
+    window.alert([...running, ...notices].join('\n\n'));
+    state.backgroundNotices = [];
+    renderBackgroundState();
+  }
+
+  function compactTaskTitle(task) {
+    return String(task.title || task.workSummary || `任务 ${task.id}`).slice(0, 48);
+  }
+
+  function renderBackgroundState() {
+    const button = $('backgroundState');
+    const running = state.backgroundSends.size + state.backgroundDiscovers.size + state.backgroundTails.size + state.backgroundReports.size;
+    button.textContent = running ? `后台 ${running}` : state.backgroundNotices.length ? `通知 ${state.backgroundNotices.length}` : '后台';
+    button.classList.toggle('connected', running > 0 || state.backgroundNotices.length > 0);
   }
 
   function currentTask() {
@@ -645,6 +1038,7 @@
     renderTodo();
     renderPublic();
     renderCloudState();
+    renderBackgroundState();
     if (state.view === 'butler') renderPiDetail();
     if (!$('taskBackdrop').classList.contains('hidden')) renderTaskDetail();
   }
@@ -677,7 +1071,8 @@
       title.appendChild(element('p', `officeCheck${machine.lastStatus === 'offline' ? ' failed' : ''}`, machineCheckText(machine)));
       const actions = element('div', 'officeActions');
       actions.appendChild(actionButton('测试', () => probeMachine(machine.id), 'advancedAction'));
-      actions.appendChild(actionButton('找任务', () => discoverMachine(machine.id), 'dark'));
+      const discovering = state.backgroundDiscovers.has(machine.id);
+      actions.appendChild(actionButton(discovering ? '发现中' : '找任务', discovering ? () => toast('这间办公室正在发现员工') : () => discoverMachine(machine.id), 'dark'));
       actions.appendChild(actionButton(isCollapsed(machine.id) ? '展开' : '收起', () => toggleSprites(machine.id), 'spriteToggle advancedAction'));
       actions.appendChild(actionButton('编辑', () => editMachine(machine.id), 'advancedAction'));
       actions.appendChild(actionButton('删除', () => deleteMachine(machine.id), 'warn advancedAction'));
@@ -719,15 +1114,61 @@
     const savedReport = studio.dailyReport && studio.dailyReport.content ? studio.dailyReport : studio.lastReport;
     const lastReport = savedReport && savedReport.content ? savedReport.content : null;
     const attention = state.tasks.filter(task => task.requiredInput);
+    const sourceRecords = [
+      ...(Array.isArray(report.completed) ? report.completed : []),
+      ...(Array.isArray(report.ongoing) ? report.ongoing : []),
+      ...(Array.isArray(report.suggestions) ? report.suggestions : []),
+    ];
+    const sourceById = new Map();
+    sourceRecords.forEach(item => {
+      const id = item.id || item.taskId;
+      if (!id) return;
+      sourceById.set(id, item.title);
+      if (item.localTaskId) sourceById.set(`P-${item.localTaskId}`, item.title);
+    });
+    const shortSourceTitle = (id) => {
+      const title = sourceById.get(id) || '';
+      const clean = cleanButlerText(title).replace(/^(Codex|Claude|Gemini)\s*·\s*/u, '').trim();
+      return compactButlerText(clean || id, 18);
+    };
+    const planSummary = lastReport ? [
+      `基于已同步记录：已验收 ${(lastReport.completed || []).length} 项`,
+      `推进 ${(lastReport.ongoing || []).length} 项`,
+      `阻塞 ${(lastReport.blockers || []).length} 项`,
+      `明天建议 ${(lastReport.tomorrow || []).length} 项`,
+      `待你决定 ${(lastReport.decisions || []).length} 项`,
+    ].join('，') + '。' : '';
+    const planItem = (item, label) => {
+      const ids = Array.isArray(item.taskIds) ? item.taskIds.filter(Boolean) : [];
+      const text = cleanButlerText(item.text)
+        .replace(/（建议，未派发）/gu, '')
+        .replace(/（未派发）/gu, '')
+        .replace(/S-[A-Za-z0-9-]+/gu, '')
+        .replace(/P-54bc7cd0-e008-4446-83eb-ac265d06ba01-[A-Za-z0-9-]+/gu, id => shortSourceTitle(id))
+        .replace(/^[\s：，,；;]+/u, '')
+        .replace(/\s{2,}/gu, ' ')
+        .replace(/：\s*/gu, '：')
+        .replace(/\s+([：，；、])/gu, '$1')
+        .replace(/、\s+/gu, '、')
+        .replace(/（\s+/gu, '（')
+        .replace(/\s+）/gu, '）')
+        .replace(/（\s*）/gu, '')
+        .replace(/（Codex）/gu, '')
+        .replace(/，属 CLI 自述未经人工验收/gu, '')
+        .replace(/；\s*为同内容的空闲会话，待区分保留哪条。/gu, '；另一条同内容会话待区分保留。')
+        .replace(/^处于待输入状态：到\s*/u, '到 ')
+        .trim();
+      return { title: text || '未命名事项', label: [label, ...ids].join(' · ') };
+    };
 
     const aiTodayItems = lastReport
       ? [
-          ...lastReport.completed.map(item => ({ title: item.text, label: '已做' })),
-          ...lastReport.ongoing.map(item => ({ title: item.text, label: '推进中' })),
+          ...lastReport.completed.map(item => planItem(item, '已做')),
+          ...lastReport.ongoing.map(item => planItem(item, '推进中')),
         ]
       : [];
     const aiTomorrowItems = lastReport && Array.isArray(lastReport.tomorrow)
-      ? lastReport.tomorrow.map(item => ({ title: item.text, label: '明日建议' }))
+      ? lastReport.tomorrow.map(item => planItem(item, '明日建议'))
       : [];
     const rawTodayItems = [
       ...(Array.isArray(report.completed) ? report.completed : []).map(item => ({
@@ -770,16 +1211,16 @@
     $('butlerAiSummary').textContent = state.butlerPlanMode === 'records'
       ? '以下内容直接来自当前已同步任务记录，未经 AI 总结。空闲、执行中或待输入都不等同于人工验收完成。'
       : lastReport && lastReport.summary
-      ? cleanButlerText(lastReport.summary)
-      : '还没有 AI 总结。点击“重新生成日报”，管家会根据已同步任务整理今日与明日。';
+      ? planSummary
+      : '还没有任务规划。点击“重新生成规划”，管家会把已同步任务整理成能直接看懂的行动项。';
     $('butlerMessageLabel').textContent = model.ready ? (modelText || '模型已连接') : '模型未连接';
 
     renderPlainRows($('piToday'), todayItems, 'today', state.butlerPlanMode === 'records'
       ? '当前没有可展示的今日记录。'
-      : 'AI 总结生成后会显示已做与推进事项。');
+      : '规划生成后会显示已完成与推进中的具体事项。');
     renderPlainRows($('piTomorrow'), tomorrowItems, 'tomorrow', state.butlerPlanMode === 'records'
       ? '当前没有可展示的明日建议。'
-      : 'AI 总结生成后会显示明日建议。');
+      : '规划生成后会显示明天建议执行的具体事项。');
     renderPlainRows($('piAttention'), attention.map(task => ({
       title: task.title, label: task.requiredInput
     })), 'attention', '当前没有等待输入的事项。');
@@ -797,7 +1238,9 @@
       });
     }
     $('sendPi').disabled = !hub.connected || !model.ready || state.sending || !$('piInput').value.trim();
-    $('generateReport').disabled = !hub.connected || !model.ready;
+    const reportRunning = state.backgroundReports.size > 0;
+    $('generateReport').disabled = !hub.connected || !model.ready || reportRunning;
+    $('generateReport').textContent = reportRunning ? '规划生成中…' : '重新生成规划';
     requestAnimationFrame(() => {
       const messages = $('piMessages');
       if (messages) messages.scrollTop = messages.scrollHeight;
@@ -814,8 +1257,8 @@
       const row = element('div', `plainRow ${kind}`);
       row.appendChild(element('span', '', ''));
       const copy = element('div');
-      copy.appendChild(element('strong', '', compactButlerText(item.title || item.text || '未命名事项', 72)));
-      copy.appendChild(element('small', '', compactButlerText(item.label || item.next || item.source || '', 90)));
+      copy.appendChild(element('strong', '', compactButlerText(item.title || item.text || '未命名事项', 120)));
+      copy.appendChild(element('small', '', compactButlerText(item.label || item.next || item.source || '', 140)));
       row.appendChild(copy);
       container.appendChild(row);
     });
@@ -831,11 +1274,6 @@
   }
 
   function openCloudSheet() {
-    const hub = state.studio && state.studio.hub ? state.studio.hub : {};
-    $('cloudUrl').value = hub.baseUrl || '';
-    $('cloudToken').value = '';
-    $('cloudShare').checked = hub.connected ? Boolean(hub.shareTasks) : true;
-    $('cloudHttp').checked = Boolean(hub.allowLocalHttp);
     const modelSettings = state.studio && state.studio.modelSettings ? state.studio.modelSettings : {};
     $('modelBaseUrl').value = modelSettings.baseUrl || '';
     $('modelId').value = modelSettings.modelId || '';
@@ -845,38 +1283,21 @@
 
   async function saveCloudConnection(event) {
     event.preventDefault();
-    const token = $('cloudToken').value;
-    const nextUrl = $('cloudUrl').value.trim();
-    if (!token && !hub.connected) {
-      toast('首次连接需要 Hub Token');
-      return;
-    }
-    if (!token && hub.baseUrl && nextUrl !== hub.baseUrl) {
-      toast('更换 Hub 地址时需要重新输入 Token');
-      return;
-    }
-    const payload = {
-      baseUrl: nextUrl,
-      token,
-      shareTasks: $('cloudShare').checked,
-      allowLocalHttp: $('cloudHttp').checked
-    };
-    let result = await call('saveStudioHub', '连接管家云端…', JSON.stringify(payload));
-    if (!result.ok) return;
-    state.studio = result.data;
     const baseUrl = $('modelBaseUrl').value.trim();
     const modelId = $('modelId').value.trim();
     const apiKey = $('modelApiKey').value;
-    if (baseUrl && modelId) {
-      const modelResult = await call('saveStudioModel', '保存 OpenAI 格式模型…', JSON.stringify({
-        baseUrl, modelId, apiKey
-      }));
-      if (!modelResult.ok) return;
-      state.studio = modelResult.data;
+    if (!baseUrl || !modelId) {
+      toast('请填写模型 Base URL 和模型名称');
+      return;
     }
+    const modelResult = await call('saveStudioModel', '保存 OpenAI 格式模型…', JSON.stringify({
+      baseUrl, modelId, apiKey
+    }));
+    if (!modelResult.ok) return;
+    state.studio = modelResult.data;
     closeSheet('cloudBackdrop');
     render();
-    toast('管家云端与模型已更新');
+    toast('管家模型配置已保存');
   }
 
   async function disconnectCloud() {
@@ -1127,22 +1548,84 @@
     }
   };
 
-  async function generateTodayReport() {
+  function generateTodayReport() {
+    if (state.backgroundReports.size) {
+      toast('任务规划正在后台生成，完成后会通知你');
+      return;
+    }
     const date = state.studio && state.studio.date
       ? state.studio.date
       : new Date().toISOString().slice(0, 10);
-    const result = await call('generateStudioReport', '正在生成今日日报…', date);
-    if (!result.ok) return;
-    state.studio = result.data;
-    state.butlerPlanMode = 'ai';
+    let parsed;
     try {
-      localStorage.setItem('butlerPlanMode', 'ai');
+      parsed = JSON.parse(AgentBridge.beginStudioReport(date));
     } catch (error) {
-      // Rendering still uses the in-memory mode.
+      parsed = { ok: false, error: '无法提交任务规划生成任务' };
     }
+    if (!parsed.ok) {
+      toast(parsed.error || '无法提交任务规划生成任务');
+      return;
+    }
+    const operation = parsed.data.operation;
+    state.backgroundReports.set(date, {
+      operation,
+      message: '正在生成任务规划…',
+      startedAt: operation.startedAt || Date.now()
+    });
+    try { AgentBridge.startTaskForeground(); } catch (error) { /* Report still runs in its native thread. */ }
     renderPiDetail();
+    renderBackgroundState();
+    toast('任务规划生成已提交后台，完成后会通知你');
+    void pollBackgroundReport(date, operation);
+  }
+
+  async function pollBackgroundReport(date, startedOperation) {
+    try {
+      for (;;) {
+        await sleep(1000);
+        const entry = state.backgroundReports.get(date);
+        if (!entry || entry.operation.id !== startedOperation.id) return;
+        let parsed;
+        try {
+          parsed = JSON.parse(AgentBridge.operationState(startedOperation.id));
+        } catch (error) {
+      parsed = { ok: false, error: '无法读取任务规划状态' };
+        }
+        if (!parsed.ok) throw new Error(parsed.error || '无法读取任务规划状态');
+        const operation = parsed.data.operation;
+        entry.operation = operation;
+        entry.message = operation.message || '正在生成任务规划…';
+        renderPiDetail();
+        renderBackgroundState();
+        if (operation.state === 'failed') throw new Error(operation.message || '任务规划生成失败');
+        if (operation.state !== 'running') break;
+      }
+
+      const entry = state.backgroundReports.get(date);
+      const operation = entry ? entry.operation : startedOperation;
+      if (operation.task) state.studio = operation.task;
+      state.butlerPlanMode = 'ai';
+      try { localStorage.setItem('butlerPlanMode', 'ai'); } catch (error) { /* in-memory mode still works */ }
+      finishBackgroundReport(date, true, '任务规划已生成');
+    } catch (error) {
+      finishBackgroundReport(date, false, `任务规划生成失败：${error.message || String(error)}`);
+    }
+  }
+
+  function finishBackgroundReport(date, succeeded, message) {
+    const entry = state.backgroundReports.get(date);
+    const operation = entry ? entry.operation : null;
+    state.backgroundReports.delete(date);
+    if (operation) {
+      try { AgentBridge.clearOperation(operation.id); } catch (error) { /* already cleared */ }
+    }
+    addBackgroundNotice(succeeded ? 'success' : 'error', message);
+    try { AgentBridge.showTaskNotification('Agent Bridge', message); } catch (error) { /* Native completion also notifies. */ }
+    try { AgentBridge.stopTaskForeground(); } catch (error) { /* Native completion also stops it. */ }
+    toast(message);
+    state.butlerPlanMode = succeeded ? 'ai' : state.butlerPlanMode;
     render();
-    toast('今日日报已生成');
+    renderBackgroundState();
   }
 
   function cleanButlerText(value) {
@@ -1277,9 +1760,30 @@
   }
 
   function prioritizeTasks(tasks) {
-    const rank = task => (task.requiredInput ? 0 : task.status === 'running' ? 2 : 4)
-      + (isRecordedTask(task) ? 1 : 0);
-    return tasks.slice().sort((left, right) => rank(left) - rank(right));
+    const stateRank = task => {
+      if (task.requiredInput) return 0;
+      // A user-provided name is an explicit importance marker. Renamed tasks
+      // queue above ordinary running/idle employees, but below pending input.
+      if (String(task.customTitle || '').trim()) return 1;
+      if (task.status === 'running') return 2;
+      if (task.status === 'idle') return 3;
+      if (task.status === 'stopped' || task.status === 'missing') return 5;
+      return 3;
+    };
+    const activityTime = task => Date.parse(task.lastActiveAt || task.updatedAt || '');
+    const activityScore = task => {
+      const time = activityTime(task);
+      if (!Number.isFinite(time)) return 0;
+      const hours = Math.max(0, (Date.now() - time) / 36e5);
+      return Math.max(0, 300 - Math.min(300, hours * 5));
+    };
+    return tasks.slice().sort((left, right) => {
+      const recordedPenalty = task => (isRecordedTask(task) ? 1000 : 0);
+      const leftScore = 10000 - stateRank(left) * 1000 + activityScore(left) - recordedPenalty(left);
+      const rightScore = 10000 - stateRank(right) * 1000 + activityScore(right) - recordedPenalty(right);
+      if (leftScore !== rightScore) return rightScore - leftScore;
+      return (activityTime(right) || 0) - (activityTime(left) || 0);
+    });
   }
 
   function loadCollapsedSprites() {
@@ -1448,7 +1952,7 @@
     $('toast').textContent = text;
     $('toast').classList.remove('hidden');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => $('toast').classList.add('hidden'), 2800);
+    toastTimer = setTimeout(() => $('toast').classList.add('hidden'), 5200);
   }
 
   window.phoneDebug = {

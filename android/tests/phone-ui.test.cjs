@@ -76,7 +76,9 @@ async function openPhone(t, options = {}) {
     const fail = error => JSON.stringify({ ok: false, error });
     let reads = 0;
     let operation;
+    let tailOperation;
     window.sendCount = 0;
+    window.tailCount = 0;
     window.voiceCalls = [];
     window.AgentBridge = {
       state: () => ++reads > 1 && options.stateFails
@@ -94,21 +96,41 @@ async function openPhone(t, options = {}) {
       },
       beginSendPrompt: () => {
         window.sendCount += 1;
-        operation = { id: 'test-operation', startedAt: Date.now(),
+        operation = { kind: 'send', id: 'test-send', startedAt: Date.now(),
           task: structuredClone(data.tasks[0]) };
         return ok({ operation });
       },
+      beginTailTask: id => {
+        window.tailCount += 1;
+        const task = data.tasks.find(item => item.id === id) || data.tasks[0];
+        tailOperation = { kind: 'tail', id: 'test-tail', startedAt: Date.now(),
+          taskId: id, stableKey: task.stableKey || '', machineId: task.machineId };
+        return ok({ operation: tailOperation });
+      },
       operationState: () => {
-        if (options.holdSend && !window.releaseSend) {
-          return ok({ operation: { ...operation, state: 'running', message: '执行中' } });
+        const current = operation?.kind === 'send' && (!tailOperation || window.sendCount)
+          ? operation : tailOperation;
+        if (!current) return fail('后台任务不存在');
+        if (current.kind === 'send' && options.holdSend && !window.releaseSend) {
+          return ok({ operation: { ...current, state: 'running', message: '执行中' } });
         }
         if (options.sendFails) {
-          return ok({ operation: { ...operation, state: 'failed', message: '发送失败' } });
+          return ok({ operation: { ...current, state: 'failed', message: '发送失败' } });
+        }
+        if (current.kind === 'tail') {
+          if (options.taskDisappears) data.tasks.shift();
+          else {
+            data.tasks[0].status = 'idle';
+            data.tasks[0].workSummary = '会话已空闲，尚未验收';
+            data.tasks[0].lastOutput = '最新输出';
+          }
+          return ok({ operation: { ...current, state: 'succeeded', message: '任务输出已刷新' } });
         }
         data.tasks[0].status = 'idle';
         data.tasks[0].lastOutput = '回复后的新输出';
         data.tasks[0].workSummary = '回复已结束，等待下一条指令';
-        return ok({ operation: { ...operation, state: 'completed', message: '完成' } });
+        return ok({ operation: { ...current, state: 'succeeded', message: '回复已发送',
+          task: structuredClone(data.tasks[0]) } });
       },
       clearOperation: () => {},
       startVoiceInput: autoSend => {
@@ -197,9 +219,9 @@ test('detail refresh updates status and output without clearing a draft', async 
   await page.locator('[data-task-id="1"]').click();
   await page.locator('#replyText').fill('尚未发送的草稿');
   await page.locator('#tailTask').click();
+  await expectToast(page, '刷新输出已提交后台，完成后会通知你');
   await page.waitForFunction(() => document.getElementById('taskOutput').textContent === '最新输出');
   assert.match(await page.locator('#taskStatusLine').textContent(), /会话空闲/);
-  assert.equal(await page.locator('#workSummary').textContent(), '会话已空闲，尚未验收');
   assert.equal(await page.locator('#replyText').inputValue(), '尚未发送的草稿');
 });
 
@@ -208,7 +230,8 @@ test('reply completion displays fresh state, not the initial operation snapshot'
   await page.locator('[data-task-id="1"]').click();
   await page.locator('#replyText').fill('测试消息，不发送到真实机器');
   await page.locator('#sendTask').click();
-  await expectToast(page, '已发送');
+  await expectToast(page, '已提交后台执行，成功或失败会通知你');
+  await page.waitForFunction(() => document.getElementById('sendTask').disabled === false);
   assert.equal(await page.locator('#taskOutput').textContent(), '回复后的新输出');
   assert.match(await page.locator('#taskStatusLine').textContent(), /会话空闲/);
   assert.equal(await page.locator('#replyText').inputValue(), '');
@@ -218,7 +241,8 @@ test('a missing task cannot receive another reply', async t => {
   const page = await openPhone(t, { taskDisappears: true });
   await page.locator('[data-task-id="1"]').click();
   await page.locator('#tailTask').click();
-  await page.waitForFunction(() => document.getElementById('sendTask').disabled);
+  await expectToast(page, '刷新输出已提交后台，完成后会通知你');
+  await page.waitForFunction(() => /本次未发现/.test(document.getElementById('taskStatusLine').textContent));
   assert.match(await page.locator('#taskStatusLine').textContent(), /本次未发现/);
 });
 
@@ -305,12 +329,13 @@ test('modal contains focus, locks background and restores focus on close', async
   assert.equal(await page.evaluate(() => document.querySelector('.app').hasAttribute('inert')), false);
 });
 
-test('confirmed sends clear drafts even when subsequent state loading fails', async t => {
+test('confirmed sends update from operation data even if state reads fail', async t => {
   const page = await openPhone(t, { stateFails: true });
   await page.locator('[data-task-id="1"]').click();
   await page.locator('#replyText').fill('只发送一次');
   await page.locator('#sendTask').click();
-  await expectToast(page, '回复已发送，记录读取失败，请刷新后查看');
+  await expectToast(page, '已提交后台执行，成功或失败会通知你');
+  await page.waitForFunction(() => document.getElementById('sendTask').disabled === false);
   assert.equal(await page.locator('#replyText').inputValue(), '');
   await page.locator('[data-close="taskBackdrop"]').click();
   await page.locator('[data-task-id="1"]').click();
@@ -329,7 +354,7 @@ test('failed replies retain the draft for correction', async t => {
   assert.equal(await page.locator('#replyText').inputValue(), '需要保留的回复');
 });
 
-test('sending prevents duplicate submissions and accidental back navigation', async t => {
+test('background sending prevents duplicate submissions and allows navigation', async t => {
   const page = await openPhone(t, { holdSend: true });
   await page.locator('[data-task-id="1"]').click();
   await page.locator('#replyText').fill('测试并发点击');
@@ -340,11 +365,13 @@ test('sending prevents duplicate submissions and accidental back navigation', as
   });
   await page.waitForFunction(() => window.sendCount === 1);
   assert.equal(await page.evaluate(() => window.phoneUI.closeTopSheet()), true);
-  assert.equal(await page.locator('#taskBackdrop').isVisible(), true);
+  assert.equal(await page.locator('#taskBackdrop').isVisible(), false);
   assert.equal(await page.locator('#sendTask').isDisabled(), true);
   await page.evaluate(() => { window.releaseSend = true; });
-  await expectToast(page, '已发送');
+  await page.waitForFunction(() => /^通知|^后台/.test(document.getElementById('backgroundState').textContent)
+    && !document.getElementById('backgroundState').textContent.startsWith('后台'));
   assert.equal(await page.evaluate(() => window.sendCount), 1);
+  await page.locator('[data-task-id="1"]').click();
   assert.equal(await page.locator('#sendTask').isEnabled(), true);
 });
 
@@ -352,7 +379,7 @@ test('unidentified sessions cannot receive a reply', async t => {
   const page = await openPhone(t);
   await page.locator('[data-task-id="3"]').click();
   assert.equal(await page.locator('#sendTask').isDisabled(), true);
-  assert.match(await page.locator('#taskMeta').textContent(), /待识别/);
+  assert.match(await page.locator('#taskMeta').textContent(), /无会话 ID，暂不能回复/);
 });
 
 test('butler composer supports hold-to-talk and slide-to-cancel', async t => {
@@ -404,6 +431,9 @@ test('native reply commands do not force bypass and guard the Codex command grou
   const source = fs.readFileSync(path.resolve(assets, '../java/com/otterview/agentsessionbridge/PhoneBridge.java'), 'utf8');
   assert.doesNotMatch(source, /--dangerously-skip-permissions/);
   assert.match(source, /&& \{ codex_bin=/);
-  assert.match(source, /shellQuote\(value\) \+ "; }"/);
+  assert.match(source, /thread=.*shellQuote\(sessionId\).*message=.*shellQuote\(value\)/s);
+  assert.match(source, /queue --thread/);
+  assert.ok(source.includes('--message \\"$message\\"'));
+  assert.match(source, /__ASB_CODEX_QUEUED__/);
   assert.equal((source.match(/\.put\("lastCheckedAt", now\(\)\)/g) || []).length, 3);
 });
