@@ -7,8 +7,8 @@ Linux machines over SSH directly from the phone.
 Current debug version:
 
 ```text
-versionName: 0.5.22
-versionCode: 38
+versionName: 0.5.23
+versionCode: 39
 minSdk: 24
 targetSdk: 35
 package: com.otterview.agentsessionbridge.debug
@@ -76,11 +76,14 @@ android/app/build/outputs/apk/debug/app-debug.apk
   expose their SSH ports to the internet.
 - Butler chat uses a fixed bottom composer, quick prompts, immediate local
   message echo, a typing indicator, and optional Chinese speech playback.
+- The butler model is called directly from Android using an OpenAI-compatible
+  `/chat/completions` endpoint. There is no Hub address, Hub token, device
+  upload, or desktop Hub round trip.
+- Butler conversations, explicit memories, and generated task plans are stored
+  in Android app-private storage.
 - Butler voice input supports press-and-hold, tap-to-toggle, and slide-up
-  cancellation. Phones without a system recognizer upload the short recording
-  to the configured Hub over the existing authorized connection; the Hub
-  transcribes it locally with `whisper-cli`. Recording audio is deleted after
-  transcription and is not sent to a third-party cloud.
+  cancellation. Phones without a system recognizer get a clear local error;
+  no recording is uploaded from the Hub-free controller.
 
 ## Add a machine
 
@@ -146,7 +149,11 @@ uses TLS, a strong random server token, and a unique STCP secret per machine.
 
 ## Butler voice setup
 
-The Hub currently uses a local Whisper engine:
+Phones without a system speech recognizer previously uploaded audio to a Hub.
+The Hub-free controller no longer performs that upload; use a device with a
+system recognizer or configure speech input at the OS level.
+
+The server Hub still supports a local Whisper engine for browser Studio users:
 
 ```bash
 brew install whisper-cpp

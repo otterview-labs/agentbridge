@@ -16,10 +16,12 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,9 +48,6 @@ final class PhoneBridge {
 
   private final MainActivity activity;
   private final BridgeStore store;
-  private final StudioHubClient studioHub;
-  private final java.util.concurrent.ThreadPoolExecutor studioExecutor = new java.util.concurrent.ThreadPoolExecutor(
-      1, 1, 0L, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<Runnable>(8));
   private final Map<Integer, JSONObject> operations = new HashMap<>();
   private final Map<Integer, Session> relayBastionSessions = new HashMap<>();
   private final SecureRandom secureRandom = new SecureRandom();
@@ -56,60 +55,9 @@ final class PhoneBridge {
   PhoneBridge(MainActivity activity) {
     this.activity = activity;
     this.store = new BridgeStore(activity);
-    this.studioHub = new StudioHubClient(activity);
   }
 
-  @JavascriptInterface
-  public String studioHubSettings() {
-    try { return success(studioHub.publicSettings()); }
-    catch (Exception error) { return failure(new Exception("Hub 配置读取失败，请断开后重新配置")); }
-  }
-
-  @JavascriptInterface
-  public String disconnectStudioHub() {
-    try { studioHub.disconnect(); return success(new JSONObject()); }
-    catch (Exception error) { return failure(new Exception("断开 Hub 失败")); }
-  }
-
-  @JavascriptInterface
-  public void beginStudioHubConnect(String requestId, String input) {
-    runStudioJob(requestId, () -> studioHub.connect(input));
-  }
-
-  @JavascriptInterface
-  public void beginStudioHubRequest(String requestId, String route, String method, String body) {
-    runStudioJob(requestId, () -> {
-      if (route.equals("/studio/state") && method.equals("GET") && studioHub.publicSettings().optBoolean("shareTasks")) {
-        JSONObject state = new JSONObject(studioState()).getJSONObject("data");
-        JSONObject upload = new JSONObject().put("revision", studioHub.revision())
-            .put("deviceName", "Android " + android.os.Build.MODEL)
-            .put("machines", state.getJSONArray("machines")).put("tasks", state.getJSONArray("tasks"));
-        studioHub.request("/studio/devices/" + studioHub.deviceId() + "/snapshot", "POST", upload.toString());
-      }
-      return studioHub.request(route, method, body);
-    });
-  }
-
-  private void runStudioJob(String requestId, java.util.concurrent.Callable<JSONObject> job) {
-    if (!requestId.matches("[a-zA-Z0-9-]{1,64}")) return;
-    try {
-      studioExecutor.execute(() -> {
-        String result;
-        try { result = success(job.call()); }
-        catch (Exception error) {
-          // Do not expose transport exceptions containing URLs, headers or keys.
-          String message = error instanceof IllegalArgumentException || error instanceof IllegalStateException
-              ? error.getMessage() : "Hub 连接失败或超时，请检查地址、证书和网络；未自动重试";
-          result = failure(new Exception(message));
-        }
-        activity.deliverStudioResponse(requestId, result);
-      });
-    } catch (java.util.concurrent.RejectedExecutionException error) {
-      activity.deliverStudioResponse(requestId, failure(new Exception("Hub 请求过多，请稍后再试")));
-    }
-  }
-
-  void close() { studioExecutor.shutdownNow(); }
+  void close() { /* Direct model calls run on their own operation threads. */ }
 
   @JavascriptInterface
   public String state() {
@@ -129,57 +77,38 @@ final class PhoneBridge {
   @JavascriptInterface
   public String studioOverview() {
     try {
-      JSONObject settings = studioHub.publicSettings();
-      if (!settings.optBoolean("connected")) {
-        return success(localStudioSnapshot().put("hub", settings));
-      }
-      if (settings.optBoolean("shareTasks")) {
-        JSONObject local = new JSONObject(studioState()).getJSONObject("data");
-        JSONObject upload = new JSONObject()
-            .put("revision", studioHub.revision())
-            .put("deviceName", "Android " + android.os.Build.MODEL)
-            .put("machines", local.getJSONArray("machines"))
-            .put("tasks", local.getJSONArray("tasks"));
-        studioHub.request("/studio/devices/" + studioHub.deviceId() + "/snapshot", "POST", upload.toString());
-      }
-      JSONObject remote = studioHub.request("/studio/state", "GET", "");
-      try {
-        remote.put("modelSettings", studioHub.request("/studio/model", "GET", ""));
-      } catch (Exception ignored) {
-        // Older Hub versions do not expose model settings.
-      }
-      remote.put("hub", settings);
-      return success(remote);
+      return success(localStudioSnapshot());
     } catch (Exception error) {
-      return failure(new Exception("管家状态读取失败；请检查云端连接后重试"));
-    }
-  }
-
-  @JavascriptInterface
-  public String saveStudioHub(String payload) {
-    try {
-      JSONObject settings = studioHub.connect(payload);
-      return success(studioOverview(settings));
-    } catch (Exception error) {
-      return failure(error);
+      return failure(new Exception("管家状态读取失败，请重试"));
     }
   }
 
   @JavascriptInterface
   public String saveStudioModel(String payload) {
     try {
-      JSONObject settings = studioHub.publicSettings();
-      if (!settings.optBoolean("connected")) throw new IllegalArgumentException("请先连接管家云端");
       JSONObject input = new JSONObject(payload);
+      String baseUrl = validateDirectModelUrl(input.optString("baseUrl", ""));
+      String modelId = input.optString("modelId", "").trim();
+      String apiKey = input.optString("apiKey", "").trim();
+      if (modelId.isEmpty() || modelId.length() > 160) {
+        throw new IllegalArgumentException("模型名不能为空，且最多 160 字符");
+      }
+      JSONObject old = store.studioModel();
+      boolean sameDestination = baseUrl.equals(old.optString("baseUrl"));
+      if (apiKey.isEmpty()) {
+        apiKey = sameDestination ? old.optString("apiKey", "") : "";
+      }
+      if (apiKey.isEmpty()) throw new IllegalArgumentException("请填写模型 API Key；更换地址时必须重新填写");
       JSONObject model = new JSONObject()
           .put("enabled", true)
           .put("provider", "openai-compatible")
-          .put("modelId", input.optString("modelId", ""))
-          .put("baseUrl", input.optString("baseUrl", ""))
-          .put("apiKey", input.optString("apiKey", ""));
-      JSONObject saved = studioHub.request("/studio/model", "PUT", model.toString());
-      JSONObject overview = studioOverview(settings);
-      overview.put("modelSettings", saved);
+          .put("modelId", modelId)
+          .put("baseUrl", baseUrl)
+          .put("apiKey", apiKey)
+          .put("updatedAt", now());
+      store.saveStudioModel(model);
+      JSONObject overview = localStudioSnapshot();
+      overview.put("modelSettings", publicStudioModel(model));
       return success(overview);
     } catch (Exception error) {
       if (error instanceof IllegalArgumentException || error instanceof IllegalStateException) return failure(error);
@@ -190,14 +119,18 @@ final class PhoneBridge {
   @JavascriptInterface
   public String sendStudioMessage(String content) {
     try {
-      JSONObject settings = studioHub.publicSettings();
-      if (!settings.optBoolean("connected")) {
-        throw new IllegalArgumentException("管家未连接云端模型");
+      JSONObject model = readyStudioModel();
+      String value = content == null ? "" : content.trim();
+      if (value.isEmpty() || value.length() > 4000) {
+        throw new IllegalArgumentException("消息须为 1–4000 字。");
       }
-      JSONObject body = new JSONObject().put("content", content);
-      JSONObject result = studioHub.request("/studio/messages", "POST", body.toString());
-      JSONObject overview = studioOverview(settings);
-      overview.put("messages", result.optJSONArray("messages"));
+      JSONArray history = store.studioMessages();
+      JSONObject snapshot = localStudioSnapshot();
+      String answer = directModelReply(model, studioChatMessages(history, value, snapshot));
+      appendStudioMessage("user", value);
+      appendStudioMessage("assistant", answer);
+      JSONObject overview = localStudioSnapshot();
+      overview.put("messages", store.studioMessages());
       return success(overview);
     } catch (Exception error) {
       if (error instanceof IllegalArgumentException || error instanceof IllegalStateException) return failure(error);
@@ -268,16 +201,22 @@ final class PhoneBridge {
   @JavascriptInterface
   public String generateStudioReport(String date) {
     try {
-      JSONObject settings = studioHub.publicSettings();
-      if (!settings.optBoolean("connected")) throw new IllegalArgumentException("管家未连接云端模型");
-      JSONObject body = new JSONObject().put("date", date);
-      JSONObject result = studioHub.request("/studio/reports", "POST", body.toString());
-      JSONObject overview = studioOverview(settings);
-      overview.put("lastReport", result.optJSONObject("report"));
+      JSONObject model = readyStudioModel();
+      JSONObject snapshot = localStudioSnapshot();
+      if (!date.equals(snapshot.getString("date"))) {
+        throw new IllegalArgumentException("只可根据当前手机记录生成今日任务规划");
+      }
+      JSONObject report = generateDirectReport(model, snapshot);
+      JSONArray reports = store.studioReports();
+      reports.put(report);
+      while (reports.length() > 20) reports.remove(0);
+      store.saveStudioReports(reports);
+      JSONObject overview = localStudioSnapshot();
+      overview.put("lastReport", report);
       return success(overview);
     } catch (Exception error) {
       if (error instanceof IllegalArgumentException || error instanceof IllegalStateException) return failure(error);
-      return failure(new Exception("今日日报生成失败；已有日报不会覆盖"));
+      return failure(new Exception("任务规划生成失败；已有规划不会覆盖"));
     }
   }
 
@@ -312,12 +251,7 @@ final class PhoneBridge {
   }
 
   JSONObject transcribeVoiceAudio(String base64Audio, String contentType) throws Exception {
-    JSONObject settings = studioHub.publicSettings();
-    if (!settings.optBoolean("connected")) throw new IllegalStateException("请先连接管家云端");
-    JSONObject body = new JSONObject()
-        .put("audioBase64", base64Audio)
-        .put("contentType", contentType == null ? "audio/mp4" : contentType);
-    return studioHub.request("/studio/voice/transcriptions", "POST", body.toString());
+    throw new IllegalStateException("直连模型模式暂不支持云端语音转写；请使用系统语音输入");
   }
 
   @JavascriptInterface
@@ -340,12 +274,6 @@ final class PhoneBridge {
     }
   }
 
-  private JSONObject studioOverview(JSONObject settings) throws Exception {
-    if (!settings.optBoolean("connected")) return localStudioSnapshot().put("hub", settings);
-    JSONObject remote = studioHub.request("/studio/state", "GET", "");
-    remote.put("hub", settings);
-    return remote;
-  }
 
   @JavascriptInterface
   public synchronized String studioState() {
@@ -413,26 +341,275 @@ final class PhoneBridge {
           .put("title", task.getString("title"))
           .put("next", task.getString("next")));
     }
+    JSONObject model = store.studioModel();
+    boolean modelReady = model.optBoolean("enabled")
+        && !model.optString("modelId").isEmpty()
+        && !model.optString("baseUrl").isEmpty()
+        && !model.optString("apiKey").isEmpty();
+    JSONArray reports = store.studioReports();
+    JSONObject latestReport = reports.length() == 0 ? null : reports.getJSONObject(reports.length() - 1);
+    JSONArray reportHistory = new JSONArray();
+    for (int index = 0; index < reports.length(); index += 1) {
+      reportHistory.put(new JSONObject()
+          .put("date", reports.getJSONObject(index).optString("date"))
+          .put("versions", 1));
+    }
     return new JSONObject()
         .put("date", date)
+        .put("generatedAt", now())
+        .put("tomorrow", tomorrowDateString())
         .put("timeZone", "Asia/Shanghai")
-        .put("scope", "当前手机的 SSH 记录与本机记忆；尚未同步到云端 Hub。")
-        .put("model", new JSONObject().put("ready", false).put("label", "模型未连接"))
-        .put("modelSettings", new JSONObject()
-            .put("enabled", false)
-            .put("provider", "openai-compatible")
-            .put("modelId", "")
-            .put("baseUrl", "")
-            .put("hasApiKey", false))
+        .put("scope", "当前手机的 SSH 记录、本机记忆和本机模型配置；不经过 Hub。")
+        .put("model", new JSONObject()
+            .put("ready", modelReady)
+            .put("label", modelReady ? model.optString("modelId") : "模型未配置"))
+        .put("modelSettings", publicStudioModel(model))
         .put("machines", local.getJSONArray("machines"))
         .put("tasks", tasks)
         .put("memories", local.getJSONArray("memories"))
-        .put("messages", new JSONArray())
-        .put("dailyReport", JSONObject.NULL)
+        .put("messages", store.studioMessages())
+        .put("dailyReport", latestReport == null ? JSONObject.NULL : latestReport)
+        .put("reportHistory", reportHistory)
         .put("report", new JSONObject()
             .put("completed", new JSONArray())
             .put("ongoing", ongoing)
-            .put("suggestions", suggestions));
+        .put("suggestions", suggestions));
+  }
+
+  private String tomorrowDateString() {
+    java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT);
+    format.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
+    return format.format(new java.util.Date(System.currentTimeMillis() + 86_400_000L));
+  }
+
+  private JSONObject publicStudioModel(JSONObject model) {
+    JSONObject result = new JSONObject();
+    try {
+      result.put("enabled", model.optBoolean("enabled"))
+          .put("provider", "openai-compatible")
+          .put("modelId", model.optString("modelId"))
+          .put("baseUrl", model.optString("baseUrl"))
+          .put("hasApiKey", !model.optString("apiKey").isEmpty())
+          .put("source", model.optString("apiKey").isEmpty() ? "unconfigured" : "local");
+    } catch (Exception ignored) {
+      // The caller treats an empty object as an unconfigured model.
+    }
+    return result;
+  }
+
+  private JSONObject readyStudioModel() throws Exception {
+    JSONObject model = store.studioModel();
+    if (!model.optBoolean("enabled") || model.optString("modelId").trim().isEmpty()
+        || model.optString("baseUrl").trim().isEmpty() || model.optString("apiKey").trim().isEmpty()) {
+      throw new IllegalArgumentException("请先在模型设置中配置 OpenAI 格式模型");
+    }
+    return model;
+  }
+
+  private String validateDirectModelUrl(String value) throws Exception {
+    String clean = value == null ? "" : value.trim().replaceAll("/+$", "");
+    if (clean.isEmpty()) throw new IllegalArgumentException("模型 Base URL 不能为空");
+    URL url = new URL(clean);
+    boolean local = url.getHost().equals("localhost") || url.getHost().equals("127.0.0.1")
+        || url.getHost().equals("[::1]");
+    if (!url.getProtocol().equals("https") && !(url.getProtocol().equals("http") && local)) {
+      throw new IllegalArgumentException("模型 Base URL 须使用 HTTPS；本机模型可用 HTTP");
+    }
+    if (url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) {
+      throw new IllegalArgumentException("模型 Base URL 不能带凭据、查询参数或片段");
+    }
+    return clean;
+  }
+
+  private void appendStudioMessage(String role, String content) throws Exception {
+    JSONArray messages = store.studioMessages();
+    JSONObject message = new JSONObject()
+        .put("id", java.util.UUID.randomUUID().toString())
+        .put("role", role)
+        .put("content", content)
+        .put("createdAt", now());
+    messages.put(message);
+    while (messages.length() > 100) messages.remove(0);
+    store.saveStudioMessages(messages);
+  }
+
+  private JSONArray studioChatMessages(JSONArray history, String value, JSONObject snapshot) throws Exception {
+    JSONArray messages = new JSONArray();
+    messages.put(new JSONObject().put("role", "system").put("content",
+        "你是 agentBridge 的手机管家，用简洁中文回答。只根据提供的手机记录回答；"
+            + "区分执行中、空闲、待输入和待人工核实。你没有命令执行、审批或任务派发权限。"));
+    messages.put(new JSONObject().put("role", "system").put("content",
+        "当前手机记录 JSON：" + new JSONObject()
+            .put("machines", snapshot.getJSONArray("machines"))
+            .put("tasks", snapshot.getJSONArray("tasks"))
+            .put("memories", snapshot.getJSONArray("memories"))));
+    int start = Math.max(0, history.length() - 20);
+    for (int index = start; index < history.length(); index += 1) {
+      JSONObject item = history.getJSONObject(index);
+      messages.put(new JSONObject()
+          .put("role", "assistant".equals(item.optString("role")) ? "assistant" : "user")
+          .put("content", item.optString("content")));
+    }
+    messages.put(new JSONObject().put("role", "user").put("content", value));
+    return messages;
+  }
+
+  private String directModelReply(JSONObject model, JSONArray messages) throws Exception {
+    HttpURLConnection connection = null;
+    try {
+      URL url = new URL(model.getString("baseUrl") + "/chat/completions");
+      connection = (HttpURLConnection) url.openConnection();
+      connection.setRequestMethod("POST");
+      connection.setConnectTimeout(15_000);
+      connection.setReadTimeout(180_000);
+      connection.setDoOutput(true);
+      connection.setRequestProperty("Authorization", "Bearer " + model.getString("apiKey"));
+      connection.setRequestProperty("Content-Type", "application/json");
+      byte[] payload = new JSONObject()
+          .put("model", model.getString("modelId"))
+          .put("messages", messages)
+          .put("max_tokens", 1800)
+          .put("temperature", 0.2)
+          .toString().getBytes(StandardCharsets.UTF_8);
+      connection.setFixedLengthStreamingMode(payload.length);
+      try (java.io.OutputStream output = connection.getOutputStream()) {
+        output.write(payload);
+      }
+      int status = connection.getResponseCode();
+      InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+      String body = readStream(stream, 2_000_000);
+      if (status >= 400) {
+        throw new IllegalStateException("模型服务返回 HTTP " + status + "，请检查模型名、密钥和额度");
+      }
+      JSONObject result = new JSONObject(body);
+      JSONArray choices = result.optJSONArray("choices");
+      if (choices == null || choices.length() == 0) {
+        throw new IllegalStateException("模型服务没有返回回复");
+      }
+      String answer = choices.getJSONObject(0)
+          .optJSONObject("message") == null ? "" : choices.getJSONObject(0)
+          .getJSONObject("message").optString("content", "").trim();
+      if (answer.isEmpty()) throw new IllegalStateException("模型服务返回了空回复");
+      return answer;
+    } catch (java.io.IOException error) {
+      throw new IllegalStateException("模型连接失败或超时，请检查网络和服务状态");
+    } finally {
+      if (connection != null) connection.disconnect();
+    }
+  }
+
+  private JSONObject generateDirectReport(JSONObject model, JSONObject snapshot) throws Exception {
+    JSONArray allTasks = snapshot.getJSONArray("tasks");
+    List<JSONObject> ranked = new ArrayList<>();
+    for (int index = 0; index < allTasks.length(); index += 1) ranked.add(allTasks.getJSONObject(index));
+    ranked.sort((left, right) -> Integer.compare(planPriority(right), planPriority(left)));
+    JSONArray selected = new JSONArray();
+    Set<String> ids = new HashSet<>();
+    JSONArray sources = new JSONArray();
+    for (int index = 0; index < ranked.size() && index < 34; index += 1) {
+      JSONObject task = ranked.get(index);
+      selected.put(new JSONObject()
+          .put("id", task.getString("id"))
+          .put("title", task.optString("title"))
+          .put("agentType", task.optString("agentType"))
+          .put("status", task.optString("status"))
+          .put("label", task.optString("label"))
+          .put("needsAttention", task.optBoolean("needsAttention"))
+          .put("next", task.optString("next"))
+          .put("source", task.optString("source")));
+      ids.add(task.getString("id"));
+      sources.put(new JSONObject()
+          .put("id", task.getString("id"))
+          .put("title", task.optString("title"))
+          .put("label", task.optString("label"))
+          .put("source", task.optString("source")));
+    }
+    String instruction = "请作为手机管家生成「任务规划」。输出一个 JSON 对象，不要 Markdown 代码围栏。"
+        + "结构：{\"summary\":\"一句话全局状态\",\"completed\":[],\"ongoing\":[{\"text\":\"一句话说明项目、进展和还差什么\",\"taskIds\":[\"S-1\"]}],"
+        + "\"blockers\":[],\"tomorrow\":[{\"text\":\"一句话说明明天做什么和如何验收\",\"taskIds\":[]}],\"decisions\":[]}。"
+        + "summary 和每个条目都是 18-60 个中文字符的完整句子，采用“在【项目】里【动作】，达到【可判断结果】”。"
+        + "禁止“继续优化、处理问题、跟进、完善、加强”等空话；text 不写任务编号；一个条目只写一件事。"
+        + "手机记录没有人工验收事件，所以 completed 必须为空，不能把执行中或空闲推断为完成。";
+    JSONArray requestMessages = new JSONArray()
+        .put(new JSONObject().put("role", "system").put("content",
+            "你是 agentBridge 的手机管家，只根据手机记录生成任务规划，不执行命令。"))
+        .put(new JSONObject().put("role", "user").put("content", instruction + "\n手机记录 JSON："
+            + new JSONObject().put("date", snapshot.getString("date")).put("tasks", selected)));
+    String raw = directModelReply(model, requestMessages).trim()
+        .replace("```json", "").replace("```", "").trim();
+    int start = raw.indexOf('{');
+    int end = raw.lastIndexOf('}');
+    if (start < 0 || end < start) throw new IllegalArgumentException("模型没有返回任务规划 JSON");
+    JSONObject parsed = new JSONObject(raw.substring(start, end + 1));
+    JSONObject content = new JSONObject()
+        .put("summary", boundedText(parsed.optString("summary"), 2000, "基于手机记录生成任务规划"))
+        .put("completed", normalizePlanRows(parsed.optJSONArray("completed"), ids, true))
+        .put("ongoing", normalizePlanRows(parsed.optJSONArray("ongoing"), ids, false))
+        .put("blockers", normalizePlanRows(parsed.optJSONArray("blockers"), ids, false))
+        .put("tomorrow", normalizePlanRows(parsed.optJSONArray("tomorrow"), ids, false))
+        .put("decisions", normalizePlanRows(parsed.optJSONArray("decisions"), ids, false));
+    if (content.getJSONArray("completed").length() > 0) {
+      throw new IllegalArgumentException("手机记录没有人工验收事件，不能生成已完成事项");
+    }
+    return new JSONObject()
+        .put("id", java.util.UUID.randomUUID().toString())
+        .put("date", snapshot.getString("date"))
+        .put("generatedAt", now())
+        .put("model", model.optString("modelId"))
+        .put("content", content)
+        .put("sources", sources)
+        .put("coverage", "使用手机本机记录 " + selected.length() + " 条，不经过 Hub；省略 "
+            + Math.max(0, allTasks.length() - selected.length()) + " 条。");
+  }
+
+  private int planPriority(JSONObject task) {
+    if (task.optBoolean("needsAttention")) return 4;
+    if ("running".equals(task.optString("status"))) return 3;
+    if ("idle".equals(task.optString("status"))) return 2;
+    return task.optString("updatedAt").isEmpty() ? 0 : 1;
+  }
+
+  private String boundedText(String value, int maximum, String fallback) {
+    String clean = value == null ? "" : value.trim();
+    return clean.isEmpty() ? fallback : clean.substring(0, Math.min(clean.length(), maximum));
+  }
+
+  private JSONArray normalizePlanRows(JSONArray input, Set<String> ids, boolean completed) throws Exception {
+    JSONArray result = new JSONArray();
+    if (input == null) return result;
+    for (int index = 0; index < input.length() && result.length() < 10; index += 1) {
+      Object value = input.get(index);
+      if (!(value instanceof JSONObject)) continue;
+      JSONObject row = (JSONObject) value;
+      String text = boundedText(row.optString("text"), 1500, "");
+      if (text.isEmpty()) continue;
+      JSONArray taskIds = new JSONArray();
+      JSONArray sourceIds = row.optJSONArray("taskIds");
+      if (sourceIds != null) {
+        for (int idIndex = 0; idIndex < sourceIds.length() && taskIds.length() < 10; idIndex += 1) {
+          String id = String.valueOf(sourceIds.get(idIndex));
+          if (!ids.contains(id)) throw new IllegalArgumentException("任务规划引用了不存在的任务：" + id);
+          taskIds.put(id);
+        }
+      }
+      if (completed && taskIds.length() == 0) {
+        throw new IllegalArgumentException("已完成事项必须引用手机任务记录");
+      }
+      result.put(new JSONObject().put("text", text).put("taskIds", taskIds));
+    }
+    return result;
+  }
+
+  private String readStream(InputStream input, int maximum) throws Exception {
+    if (input == null) return "";
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    int read;
+    while ((read = input.read(buffer)) != -1) {
+      if (output.size() + read > maximum) throw new IllegalStateException("模型服务响应过大");
+      output.write(buffer, 0, read);
+    }
+    return output.toString("UTF-8");
   }
 
   @JavascriptInterface

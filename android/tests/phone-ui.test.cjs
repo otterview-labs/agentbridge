@@ -77,12 +77,35 @@ async function openPhone(t, options = {}) {
     let reads = 0;
     let operation;
     let tailOperation;
+    const studio = {
+      date: '2026-09-20', timeZone: 'Asia/Shanghai',
+      scope: '当前手机的 SSH 记录、本机记忆和本机模型配置；不经过 Hub。',
+      model: { ready: Boolean(options.modelReady), label: options.modelReady ? 'test-model' : '模型未配置' },
+      modelSettings: {
+        enabled: Boolean(options.modelReady), provider: 'openai-compatible',
+        modelId: options.modelReady ? 'test-model' : '', baseUrl: options.modelReady ? 'https://model.example.test/v1' : '',
+        hasApiKey: Boolean(options.modelReady), source: options.modelReady ? 'local' : 'unconfigured'
+      },
+      machines: [], tasks: [], memories: [], messages: [],
+      dailyReport: null, reportHistory: [],
+      report: { completed: [], ongoing: [], suggestions: [] }
+    };
     window.sendCount = 0;
     window.tailCount = 0;
     window.voiceCalls = [];
     window.AgentBridge = {
       state: () => ++reads > 1 && options.stateFails
         ? fail('读取失败') : ok(data),
+      studioOverview: () => ok(studio),
+      saveStudioModel: payload => {
+        const input = JSON.parse(payload);
+        studio.modelSettings = {
+          enabled: true, provider: 'openai-compatible', modelId: input.modelId,
+          baseUrl: input.baseUrl, hasApiKey: true, source: 'local'
+        };
+        studio.model = { ready: true, label: input.modelId };
+        return ok(studio);
+      },
       discoverTasks: id => (options.failedIds || []).includes(id)
         ? fail('SSH 无法连接') : ok({ tasks: data.tasks }),
       tailTask: () => {
@@ -382,6 +405,22 @@ test('unidentified sessions cannot receive a reply', async t => {
   assert.match(await page.locator('#taskMeta').textContent(), /无会话 ID，暂不能回复/);
 });
 
+test('butler model is configured directly without a Hub dependency', async t => {
+  const page = await openPhone(t, { modelReady: false });
+  await page.locator('[data-view="butler"]').click();
+  assert.equal(await page.locator('#cloudState').textContent(), '模型未连接');
+  assert.equal(await page.locator('#sendPi').isDisabled(), true);
+  await page.locator('#openCloudFromButler').click();
+  await page.locator('#modelBaseUrl').fill('https://model.example.test/v1');
+  await page.locator('#modelId').fill('test-model');
+  await page.locator('#modelApiKey').fill('test-only-secret');
+  await page.locator('#cloudForm button[type="submit"]').click();
+  await page.waitForFunction(() => document.getElementById('cloudState').textContent === '模型已连接');
+  assert.equal(await page.locator('#piMeta').textContent(), 'test-model');
+  assert.equal(await page.locator('#modelApiKey').inputValue(), '');
+  assert.equal(await page.evaluate(() => document.body.innerText.includes('test-only-secret')), false);
+});
+
 test('butler composer supports hold-to-talk and slide-to-cancel', async t => {
   const page = await openPhone(t);
   await page.locator('[data-view="butler"]').click();
@@ -436,4 +475,12 @@ test('native reply commands do not force bypass and guard the Codex command grou
   assert.ok(source.includes('--message \\"$message\\"'));
   assert.match(source, /__ASB_CODEX_QUEUED__/);
   assert.equal((source.match(/\.put\("lastCheckedAt", now\(\)\)/g) || []).length, 3);
+});
+
+test('phone butler calls the model directly and contains no Hub client path', () => {
+  const source = fs.readFileSync(path.resolve(assets, '../java/com/otterview/agentsessionbridge/PhoneBridge.java'), 'utf8');
+  assert.doesNotMatch(source, /StudioHubClient|saveStudioHub|disconnectStudioHub|beginStudioHub/);
+  assert.match(source, /chat\/completions/);
+  assert.match(source, /Bearer " \+ model\.getString\("apiKey"\)/);
+  assert.match(source, /不经过 Hub/);
 });

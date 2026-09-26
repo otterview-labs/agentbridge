@@ -6,6 +6,8 @@ Notable changes to agentBridge are documented here.
 
 ### Added
 
+- Android 0.5.23 Hub-free butler mode: direct OpenAI-compatible model calls,
+  local conversations, local memories, and locally generated task plans.
 - Public contribution, support, and security documentation.
 - CI and dependency-update automation.
 - Security regression coverage for configuration, terminal classification, and workspace path containment.
@@ -28,6 +30,8 @@ Notable changes to agentBridge are documented here.
 - Android relays target the local SSH service when deploying an STCP client,
   allowing a public SSH endpoint to differ from the target machine's local port.
 - The Studio UI now calls the saved model analysis “任务规划” instead of “日报”.
+- Android no longer packages or uses StudioHubClient; model and planning calls
+  no longer require a Hub address or Hub token.
 
 ### Changed
 

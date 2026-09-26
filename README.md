@@ -19,9 +19,9 @@ agentBridge 是一个自托管的 AI 编程团队控制台。它把本机与远�
 | --- | --- | --- |
 | 控制台 | `/` | 操作：会话、任务、审批、机器、终端、公网部署 |
 | 小镇工作室 | `/studio` | 日常：管家对话、像素办公室、任务规划、记忆 |
-| Android 应用 | [下载 APK](https://otterview-labs.github.io/agentbridge/) | 移动：手机直连远程机器，也可连 Hub 共用工作室 |
+| Android 应用 | [下载 APK](https://otterview-labs.github.io/agentbridge/) | 移动：直连 SSH 机器与 OpenAI 格式模型 |
 
-此外还有 CLI、HTTP API 和飞书三个程序化入口。工作室与控制台共用同一个 Hub 和同一个 API Token，不是两套数据；Android 连接 Hub 后读写的是同一份对话、记忆和任务规划，断网时退回本机记录。
+此外还有 CLI、HTTP API 和飞书三个程序化入口。浏览器工作室与控制台共用同一个 Hub；Android 手机控制器不再依赖 Hub，模型、对话、记忆和任务规划都保存在手机本机。
 
 ## 功能
 
@@ -65,7 +65,7 @@ Pi 模型配置方法与数据边界见 [`docs/pi-studio.md`](docs/pi-studio.md)
 
 - 提供 Web UI、CLI、HTTP API 和 SSE 事件流
 - 可选飞书长连接、主动通知、浏览器通知和 PWA 安装
-- Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，局域网或直连模式下对方机器不需要安装 Runner；它也可以连接 Hub，共用同一套工作室对话、记忆与任务规划
+- Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，局域网或直连模式下对方机器不需要安装 Runner；管家模型由手机直连 OpenAI 格式接口，对话、记忆与任务规划保存在手机本机
 
 Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbridge/)取用，无需自行构建；WebView 壳、签名与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
 
@@ -90,7 +90,7 @@ Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbrid
 | 小镇工作室与 Pi 任务规划 | 实验性，Pi 默认关闭 |
 | 飞书入口 | 实验性，必须配置用户或群聊白名单 |
 | 文件浏览、Git 预览、受控终端 | 实验性，高权限功能 |
-| Android 应用 | 实验性，当前 0.5.22 |
+| Android 应用 | 实验性，当前 0.5.23 |
 | 在远程机器上创建会话 | 尚未实现 |
 | 外部服务器管理 | 可选集成，需要单独安装兼容项目 |
 
@@ -110,14 +110,14 @@ Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbrid
   <sub>左起：手机浏览器、Android 应用的本机记录与任务规划。</sub>
 </p>
 
-以上为 `/studio`（小镇工作室）：管家对话、像素办公室、任务规划与显式记忆。桌面与手机浏览器共用同一套页面，Android 应用复用相同资源，也可脱离 Hub 以本机模式独立运行。
+以上为 `/studio`（小镇工作室）：管家对话、像素办公室、任务规划与显式记忆。桌面与手机浏览器共用同一套页面；Android 原生控制器使用独立的手机界面和本机数据。
 控制台式管理界面（会话、审批、机器与终端）在 `/`。
 
 ## Pi 小镇工作室
 
 新增 `/studio`：响应式 Web / 手机工作室，包含管家对话、像素办公室、
-Pi 分析生成的任务规划和显式用户记忆。Android 使用同一页面资源，
-支持连接 Hub 共享对话、记忆和任务规划，并可选择上传本机任务摘要。
+Pi 分析生成的任务规划和显式用户记忆。Android 原生控制器使用独立的手机界面，
+直接调用 OpenAI 格式模型，并把对话、记忆和任务规划保存在手机应用私有存储。
 页面内可配置模型提供商、API 地址和加密保存的密钥，原有控制台仍可进入。
 Pi 默认关闭，配置方法与数据边界见
 [Pi 工作室说明](docs/pi-studio.md)。
@@ -307,7 +307,7 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 - `actorId` 是审计标签，不是多租户身份认证机制。
 - 终端、文件浏览和服务器管理属于高权限功能。
 - 启用 Pi 后会向配置的提供商发送对话、已确认记忆和任务摘要；SSH 密码、私钥、原始终端输出和命令行不会被发送，但任务标题与你自己输入的正文仍可能含敏感信息。详见 [`docs/pi-studio.md`](docs/pi-studio.md)。
-- Android 应用上的 Hub Token 由 Android Keystore 加密保存；SSH 凭据则存在应用私有的 `SharedPreferences` 中，尚未用 Keystore 加密，设备被 root 或备份被导出时不再受保护。
+- Android 应用不再保存 Hub Token；模型 API Key、SSH 凭据和本机记录存在应用私有 `SharedPreferences` 中，尚未用 Keystore 加密，设备被 root 或备份被导出时不再受保护。
 - 安全问题请使用 GitHub 的私密漏洞报告，不要创建公开 Issue。详情见 [`SECURITY.md`](SECURITY.md)。
 
 ## 限制
