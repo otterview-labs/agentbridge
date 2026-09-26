@@ -4,9 +4,9 @@
   <img src="docs/screenshots/icon.png" width="96" alt="agentBridge 吉祥物图标">
 </p>
 
-agentBridge 是一个自托管的 AI 编程助手控制台。它把本机与远程机器上的 Codex、Claude Code 和 Gemini CLI 会话收拢到一处，用「任务 + 人工验收」管理它们的产出，并可选地通过公网中转把内网机器接进来。
+agentBridge 是一个自托管的 AI 编程团队控制台。它把本机与远程机器上的 Codex、Claude Code 和 Gemini CLI 会话收拢到一处，用「任务 + 人工验收」管理产出，再用移动端任务规划决定下一步做什么。
 
-会话本身跑在本机 `tmux` 里，会话与消息状态保存在本地 SQLite，不依赖任何托管服务。对远程机器，agentBridge 复用你已有的密钥登录做发现和观察；需要跨网络时用 FRP 打一条隧道，而不是把 SSH 端口暴露到公网——这条路径会在你选定的机器上安装 `frpc`（云端入口则安装 `frps`），SSH 发现本身不装任何东西。
+会话本身跑在本机 `tmux` 里，会话与消息状态保存在本地 SQLite，不依赖任何托管服务。对远程机器，agentBridge 通过你已有的 SSH 凭据做发现和观察；需要跨网络时用 FRP 打一条安全隧道，而不是把 SSH 端口暴露到公网——这条路径会在你选定的机器上安装 `frpc`（云端入口则安装 `frps`），局域网 SSH 发现本身不装任何东西。
 
 它不替你执行。任务的派发、验收和停止都要人确认；工具不会从「会话空闲」推断任务完成，也不会自动重试投递。
 
@@ -18,10 +18,10 @@ agentBridge 是一个自托管的 AI 编程助手控制台。它把本机与远�
 | 入口 | 位置 | 面向 |
 | --- | --- | --- |
 | 控制台 | `/` | 操作：会话、任务、审批、机器、终端、公网部署 |
-| 小镇工作室 | `/studio` | 日常：管家对话、像素办公室、日报、记忆 |
+| 小镇工作室 | `/studio` | 日常：管家对话、像素办公室、任务规划、记忆 |
 | Android 应用 | [下载 APK](https://otterview-labs.github.io/agentbridge/) | 移动：手机直连远程机器，也可连 Hub 共用工作室 |
 
-此外还有 CLI、HTTP API 和飞书三个程序化入口。工作室与控制台共用同一个 Hub 和同一个 API Token，不是两套数据；Android 连接 Hub 后读写的是同一份对话、记忆和日报，断网时退回本机记录。
+此外还有 CLI、HTTP API 和飞书三个程序化入口。工作室与控制台共用同一个 Hub 和同一个 API Token，不是两套数据；Android 连接 Hub 后读写的是同一份对话、记忆和任务规划，断网时退回本机记录。
 
 ## 功能
 
@@ -44,8 +44,8 @@ agentBridge 是一个自托管的 AI 编程助手控制台。它把本机与远�
 
 ### 远程机器与公网中转
 
-- 通过 SSH 发现本机以外的 Mac/Linux 机器，读取已安装的 AI CLI 与 `tmux` 窗格
-- 把远端 Claude/Codex/Gemini 窗格导入为可观察的任务，抓取有界输出、发送输入
+- 通过 SSH 发现本机以外的 Mac/Linux 机器，读取已安装的 AI CLI、`tmux` 窗格和已有的 Claude/Codex 会话记录
+- 把远端 Claude/Codex/Gemini 窗格导入为可观察的任务，抓取有界输出、发送输入，并把输入记录整理成问答时间线
 - 用 FRP STCP 隧道接入内网机器，而不是为其开放 SSH 端口
 - 可复用已有的 `frps`，也可托管安装一个；`frpc` 校验 SHA-256 后安装
 
@@ -53,8 +53,8 @@ SSH 机器发现与 FRP 公网中转见 [`docs/frp-relay.md`](docs/frp-relay.md)
 
 ### 小镇工作室
 
-- `/studio` 响应式工作室：管家对话、像素办公室、日报与显式记忆
-- 日报由 Pi 分析生成，给出整体结论、今日成果、推进中的工作、阻塞风险、明日优先事项
+- `/studio` 响应式工作室：管家对话、像素办公室、任务规划与显式记忆
+- 任务规划由 Pi 分析生成：先给出验收 / 推进 / 阻塞 / 建议的数量，再为每个事项写一句「在哪个项目里做什么、如何判断完成」
 - 模型提供商、地址与密钥在页面内配置，密钥以 AES-256-GCM 加密存储
 - 管家支持语音输入；手机没有系统识别器时把短录音上传到 Hub，由本地 `whisper-cli` 转写，转写完即删、不发往第三方云
 - Android 应用复用同一套页面资源
@@ -65,9 +65,17 @@ Pi 模型配置方法与数据边界见 [`docs/pi-studio.md`](docs/pi-studio.md)
 
 - 提供 Web UI、CLI、HTTP API 和 SSE 事件流
 - 可选飞书长连接、主动通知、浏览器通知和 PWA 安装
-- Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，对方机器不需要装本项目的任何东西；它也可以连接 Hub，共用同一套工作室对话、记忆与日报
+- Android 应用是独立的手机控制端：直接经 SSH 发现远程机器上的 Claude/Codex 会话并回复，局域网或直连模式下对方机器不需要安装 Runner；它也可以连接 Hub，共用同一套工作室对话、记忆与任务规划
 
 Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbridge/)取用，无需自行构建；WebView 壳、签名与 APK 构建见 [`docs/android-app.md`](docs/android-app.md)。
+
+### 移动端工作流
+
+- 办公室模型对应机器，员工模型对应 Claude/Codex/Gemini 任务；待输入、手动命名、执行中和空闲任务分层展示
+- 发送回复、发现员工、刷新输出和生成任务规划都是后台作业，提交后即可离开当前页面
+- 长任务通过 Android 前台服务保活，成功或失败发送系统通知；失败的回复草稿会回到输入框，避免重复输入
+- 任务详情区分「我问」「Agent 回复」和系统输出，原始记录折叠保留，方便核对证据
+- 当 Codex Desktop 正在占用某个线程时，手机端不抢写锁，而是把消息放入该线程队列，等当前回合结束后继续
 
 ### 当前状态
 
@@ -79,10 +87,10 @@ Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbrid
 | 指挥中心任务流 | 可用，仅本机执行 |
 | SSH 机器发现与远程任务 | 实验性，只发现和观察，不在远端创建进程 |
 | FRP 公网中转 | 实验性，第一版只支持一个云端入口 |
-| 小镇工作室与 Pi 日报 | 实验性，Pi 默认关闭 |
+| 小镇工作室与 Pi 任务规划 | 实验性，Pi 默认关闭 |
 | 飞书入口 | 实验性，必须配置用户或群聊白名单 |
 | 文件浏览、Git 预览、受控终端 | 实验性，高权限功能 |
-| Android 应用 | 实验性，当前 0.5.21 |
+| Android 应用 | 实验性，当前 0.5.21；0.5.22 开发版已引入后台作业与任务规划 |
 | 在远程机器上创建会话 | 尚未实现 |
 | 外部服务器管理 | 可选集成，需要单独安装兼容项目 |
 
@@ -95,21 +103,21 @@ Android 应用可直接从[下载页](https://otterview-labs.github.io/agentbrid
 <p align="center">
   <img src="docs/screenshots/studio-mobile.png" width="196" alt="小镇工作室（手机浏览器）">
   <img src="docs/screenshots/android-local.png" width="196" alt="Android 应用：本机记录">
-  <img src="docs/screenshots/android-report.png" width="196" alt="Android 应用：管家日报">
+  <img src="docs/screenshots/android-report.png" width="196" alt="Android 应用：任务规划">
 </p>
 
 <p align="center">
-  <sub>左起：手机浏览器、Android 应用的本机记录与管家日报。</sub>
+  <sub>左起：手机浏览器、Android 应用的本机记录与任务规划。</sub>
 </p>
 
-以上为 `/studio`（小镇工作室）：管家对话、像素办公室、日报与显式记忆。桌面与手机浏览器共用同一套页面，Android 应用复用相同资源，也可脱离 Hub 以本机模式独立运行。
+以上为 `/studio`（小镇工作室）：管家对话、像素办公室、任务规划与显式记忆。桌面与手机浏览器共用同一套页面，Android 应用复用相同资源，也可脱离 Hub 以本机模式独立运行。
 控制台式管理界面（会话、审批、机器与终端）在 `/`。
 
 ## Pi 小镇工作室
 
 新增 `/studio`：响应式 Web / 手机工作室，包含管家对话、像素办公室、
-Pi 分析生成的日报 / 明日建议和显式用户记忆。Android 0.5.21 使用同一页面资源，
-支持连接 Hub 共享对话、记忆和日报，并可选择上传本机任务摘要。
+Pi 分析生成的任务规划和显式用户记忆。Android 使用同一页面资源，
+支持连接 Hub 共享对话、记忆和任务规划，并可选择上传本机任务摘要。
 页面内可配置模型提供商、API 地址和加密保存的密钥，原有控制台仍可进入。
 Pi 默认关闭，配置方法与数据边界见
 [Pi 工作室说明](docs/pi-studio.md)。
@@ -312,7 +320,7 @@ ASB_FEISHU_REPLY_IN_THREAD=true
 - Git 预览不包含原生 Git 的 rename detection 和仅文件模式变化。
 - Web UI 刷新或关闭后不会保留 API Token。
 - 备份 Pi 模型配置需要同时包含数据库与 `dataDir/pi-model.key`，丢失密钥会拒绝解密。
-- Android 应用没有后台轮询或前台服务，只在打开或手动刷新时发现变化；Windows 主机尚不作为一等 SSH 目标支持。
+- Android 应用不会为了刷新状态而持续后台轮询；只有用户提交的发现、回复、刷新输出和生成规划作业会使用前台服务。Windows 主机尚不作为一等 SSH 目标支持。
 
 ## 项目结构
 
@@ -322,7 +330,7 @@ agentbridge/
 ├── src/           # 应用源码
 ├── test/          # 自动测试
 ├── docs/          # 架构、命令和路线文档
-├── android/       # Android WebView 壳与构建脚本
+├── android/       # Android WebView 壳、SSH 控制端与构建脚本
 ├── data/          # 本机运行数据；Git 只跟踪 .gitkeep
 └── .github/       # CI、安全扫描和仓库维护配置
 ```
