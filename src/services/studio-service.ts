@@ -35,6 +35,18 @@ function dated(value: string): string {
   return Number.isNaN(date.getTime()) ? '' : studioDate(date);
 }
 
+function planningDetail(task: object): string {
+  const evidence = task as { summary?: unknown; objective?: unknown; evidence?: unknown; activity?: unknown };
+  const activity = Array.isArray(evidence.activity)
+    ? evidence.activity.map(event => event && typeof event === 'object' && 'message' in event
+      ? String((event as { message: unknown }).message) : '')
+    : [];
+  return [evidence.summary, evidence.objective, evidence.evidence, ...activity]
+    .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()))
+    .join('\n')
+    .slice(0, 700);
+}
+
 /** One trusted Hub owner, with explicit memory and no execution capabilities. */
 export class StudioService {
   private busy = false;
@@ -145,7 +157,7 @@ export class StudioService {
     };
   }
   reports(date: string): StudioReport[] {
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) throw new ValidationError('日报日期格式无效。');
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) throw new ValidationError('任务规划日期格式无效。');
     return this.options.database.prepare('SELECT payload FROM studio_reports WHERE date=? ORDER BY rowid DESC LIMIT 20').all(date)
       .map(row => JSON.parse(String(row.payload)) as StudioReport);
   }
@@ -155,14 +167,27 @@ export class StudioService {
   }
   async generateReport(date: unknown) {
     const today = studioDate(this.now());
-    if (date !== today) throw new ValidationError('只可根据当前记录生成今日日报；历史日期请查看已保存报告。');
+    if (date !== today) throw new ValidationError('只可根据当前记录生成今日任务规划；历史日期请查看已保存规划。');
     const model = this.model();
     if (!model) throw new ConflictError('Pi 尚未配置，请先在模型设置中接入模型。');
     if (this.busy) throw new ConflictError('管家正在处理请求，请稍后再生成。');
     this.busy = true;
     try {
       const state = await this.snapshot();
-      const tasks = state.tasks.slice(0, 100);
+      // Keep task planning fast and readable. Send a bounded, state-prioritized
+      // projection instead of every evidence field from every synced device.
+      const rankedTasks = [
+        ...state.tasks.filter(task => task.completedToday).slice(0, 10),
+        ...state.tasks.filter(task => !task.completedToday && task.needsAttention).slice(0, 8),
+        ...state.tasks.filter(task => !task.completedToday && !task.needsAttention && task.status === 'running').slice(0, 8),
+        ...state.tasks.filter(task => !task.completedToday && !task.needsAttention && task.status !== 'running').slice(0, 8),
+      ];
+      const tasks = rankedTasks.map(task => ({
+        id: task.id, title: task.title, agentType: task.agentType, status: task.status,
+        label: task.label, needsAttention: task.needsAttention, next: task.next,
+        source: task.source, updatedAt: task.updatedAt, completedToday: task.completedToday,
+        detail: planningDetail(task),
+      }));
       const answer = await model.reply({
         message: REPORT_INSTRUCTION, history: this.messages().filter(m => dated(m.createdAt) === today).slice(-20),
         memories: this.memories(),
@@ -178,7 +203,7 @@ export class StudioService {
       return report;
     } catch (error) {
       if (error instanceof ValidationError) throw error;
-      throw new ConflictError('日报生成失败或超时，旧日报已保留；请检查模型配置后重试。');
+      throw new ConflictError('任务规划生成失败或超时，旧规划已保留；请检查模型配置后重试。');
     } finally { this.busy = false; }
   }
   async chat(input: unknown) {

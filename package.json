@@ -50,6 +50,7 @@
     "@larksuiteoapi/node-sdk": "^1.73.1",
     "diff": "^9.0.0",
     "isomorphic-git": "^1.41.9",
+    "partial-json": "0.1.7",
     "pino": "^9.9.0",
     "zod": "^3.24.2"
   },
