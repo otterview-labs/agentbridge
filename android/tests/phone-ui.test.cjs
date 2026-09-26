@@ -530,6 +530,18 @@ test('discovery collapses duplicate Claude processes and Codex subagents', () =>
   // Renames must survive the stable-key migration from PID to session ID.
   assert.match(source, /oldByExternalSession\.get\(externalSessionId\)/);
   assert.match(source, /withoutDeletedTasks\(discovered\)/);
+  assert.match(source, /dedupeSemanticTasks\(discovered\)/);
   assert.match(source, /deleteTask\(int id\)/);
   assert.match(source, /restoreDeletedTask\(int id\)/);
+});
+
+test('SSH sockets bypass an always-on VPN through the physical network', () => {
+  const source = fs.readFileSync(path.resolve(assets, '../java/com/otterview/agentsessionbridge/PhoneBridge.java'), 'utf8');
+  const manifest = fs.readFileSync(path.resolve(assets, '../AndroidManifest.xml'), 'utf8');
+  assert.match(source, /DirectNetworkSocketFactory/);
+  assert.match(source, /TRANSPORT_VPN/);
+  assert.match(source, /TRANSPORT_WIFI/);
+  assert.match(source, /network\.bindSocket\(socket\)/);
+  assert.match(source, /Inet4Address/);
+  assert.match(manifest, /android\.permission\.ACCESS_NETWORK_STATE/);
 });

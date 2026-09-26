@@ -1,6 +1,10 @@
 package com.otterview.agentsessionbridge;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.util.Log;
@@ -8,6 +12,7 @@ import android.util.Log;
 import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SocketFactory;
 import com.jcraft.jsch.UIKeyboardInteractive;
 import com.jcraft.jsch.UserInfo;
 
@@ -15,7 +20,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -611,6 +618,75 @@ final class PhoneBridge {
       output.write(buffer, 0, read);
     }
     return output.toString("UTF-8");
+  }
+
+  /**
+   * Binds JSch to the phone's Wi-Fi/Ethernet network when an always-on VPN is
+   * active. A VPN may accept the default route but block long-lived raw SSH
+   * sockets, which surfaces as JSch's "socket is not established" timeout.
+   */
+  private static final class DirectNetworkSocketFactory implements SocketFactory {
+    private final Network network;
+    private final ConnectivityManager manager;
+
+    DirectNetworkSocketFactory(Context context) {
+      Network selected = null;
+      ConnectivityManager selectedManager = null;
+      try {
+        ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
+        if (manager != null) {
+          for (Network network : manager.getAllNetworks()) {
+            NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+            if (capabilities == null || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                && !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) continue;
+            selected = network;
+            // Some OEM/VPN stacks honor bindSocket for the source address but
+            // still apply per-UID routing. Bind the process as well before JSch
+            // performs DNS and channel setup.
+            selectedManager = manager;
+            break;
+          }
+        }
+      } catch (Exception error) {
+        Log.w("AgentBridgeNative", "direct network selection failed; using default", error);
+      }
+      this.network = selected;
+      this.manager = selectedManager;
+    }
+
+    @Override
+    public Socket createSocket(String host, int port) throws IOException {
+      if (network == null) return new Socket(host, port);
+      InetAddress target = null;
+      Network previousNetwork = manager == null ? null : manager.getActiveNetwork();
+      try {
+        manager.bindProcessToNetwork(network);
+        for (InetAddress address : network.getAllByName(host)) {
+          if (address instanceof java.net.Inet4Address) {
+            target = address;
+            break;
+          }
+        }
+        if (target == null) target = network.getAllByName(host)[0];
+        Socket socket = new Socket();
+        network.bindSocket(socket);
+        socket.connect(new InetSocketAddress(target, port), CONNECT_TIMEOUT);
+        return socket;
+      } finally {
+        if (manager != null) manager.bindProcessToNetwork(previousNetwork);
+      }
+    }
+
+    @Override
+    public InputStream getInputStream(Socket socket) throws IOException {
+      return socket.getInputStream();
+    }
+
+    @Override
+    public OutputStream getOutputStream(Socket socket) throws IOException {
+      return socket.getOutputStream();
+    }
   }
 
   @JavascriptInterface
@@ -1369,6 +1445,7 @@ final class PhoneBridge {
             + " tmux=" + (probe.optString("tmuxVersion").isEmpty() ? 0 : 1)
             + " total=" + discovered.length());
         preserveCustomTitles(machineId, discovered);
+        discovered = dedupeSemanticTasks(discovered);
         store.replaceTasksForMachine(machineId, discovered);
         return success(new JSONObject().put("machine", machine).put("tasks", discovered));
       } finally {
@@ -1426,6 +1503,58 @@ final class PhoneBridge {
       if (!store.isDeletedTask(task)) visible.put(task);
     }
     return visible;
+  }
+
+  private JSONArray dedupeSemanticTasks(JSONArray discovered) throws Exception {
+    Map<String, JSONObject> bestByKey = new HashMap<>();
+    JSONArray result = new JSONArray();
+    for (int index = 0; index < discovered.length(); index += 1) {
+      JSONObject task = discovered.getJSONObject(index);
+      String title = task.optString("title", "").trim().replaceAll("\\s+", " ");
+      String workspace = task.optString("workspacePath", "").trim();
+      String key = task.getInt("machineId") + "|" + task.optString("agentType", "")
+          + "|" + title.toLowerCase(java.util.Locale.ROOT) + "|" + workspace;
+      JSONObject old = bestByKey.get(key);
+      if (old == null || preferSemanticTask(task, old)) {
+        if (old != null) {
+          for (int resultIndex = 0; resultIndex < result.length(); resultIndex += 1) {
+            if (result.get(resultIndex) == old) {
+              result.remove(resultIndex);
+              break;
+            }
+          }
+        }
+        bestByKey.put(key, task);
+        result.put(task);
+      }
+    }
+    return result;
+  }
+
+  private boolean preferSemanticTask(JSONObject candidate, JSONObject old) {
+    int candidateScore = semanticTaskScore(candidate);
+    int oldScore = semanticTaskScore(old);
+    if (candidateScore != oldScore) return candidateScore > oldScore;
+    return taskTime(candidate) > taskTime(old);
+  }
+
+  private int semanticTaskScore(JSONObject task) {
+    int score = 0;
+    if (!task.optString("requiredInput", "").trim().isEmpty()) score += 8;
+    if ("running".equals(task.optString("status"))) score += 4;
+    if (!task.optString("customTitle", "").trim().isEmpty()) score += 2;
+    if (!task.optString("workSummary", "").trim().isEmpty()) score += 1;
+    return score;
+  }
+
+  private long taskTime(JSONObject task) {
+    String value = task.optString("lastActiveAt", "");
+    if (value.isEmpty()) value = task.optString("updatedAt", "");
+    try {
+      return java.time.Instant.parse(value).toEpochMilli();
+    } catch (Exception ignored) {
+      return 0;
+    }
   }
 
   @JavascriptInterface
@@ -1578,6 +1707,7 @@ final class PhoneBridge {
     String host = machine.getString("host");
     int port = machine.getInt("port");
     Session session = jsch.getSession(username, host, port);
+    session.setSocketFactory(new DirectNetworkSocketFactory(activity));
     if ("key".equals(machine.optString("authType"))) {
       byte[] key = machine.getString("privateKey").getBytes(StandardCharsets.UTF_8);
       jsch.addIdentity("phone-key", key, null, null);

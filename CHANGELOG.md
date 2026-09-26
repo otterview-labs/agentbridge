@@ -6,6 +6,11 @@ Notable changes to agentBridge are documented here.
 
 ### Added
 
+- Android 0.5.26 network routing for SSH: JSch temporarily binds to the active
+  non-VPN Wi-Fi/Ethernet network and prefers IPv4, working around OEM/VPN rules
+  that block raw SSH sockets while leaving HTTP traffic unchanged.
+- Discovery now also collapses same-title, same-workspace task records after
+  preserving custom names and deleted identities.
 - Android 0.5.25 employee removal: deleted employees stay in a per-office
   restorable list, do not reappear during discovery, and never delete remote
   projects, session transcripts, or workspace files.
