@@ -46,7 +46,7 @@
   <nav class="navigation" aria-label="工作区">
     <button data-view="chat" aria-current="page"><span aria-hidden="true">π</span>管家</button>
     <button data-view="town"><span aria-hidden="true">⌂</span>小镇</button>
-    <button data-view="daily"><span aria-hidden="true">☷</span>日报</button>
+    <button data-view="daily"><span aria-hidden="true">☷</span>规划</button>
     <button data-view="memory"><span aria-hidden="true">◇</span>记忆</button>
   </nav>
   <div class="workspace">
@@ -57,7 +57,7 @@
         <div class="assistant"><span class="avatar" aria-hidden="true">π</span><div class="assistant-body"><p class="byline">工作记录摘要 · 非 AI 生成</p><p id="brief">正在读取…</p><ul class="facts" id="briefFacts"></ul></div></div>
         <div class="pending" id="pending" hidden><strong>有事情需要你关注</strong><p id="pendingText"></p><button class="quiet" data-go="town">查看任务与下一步</button></div>
         <div id="messages" class="messages" aria-live="polite"></div>
-        <div class="quick"><button class="quiet" data-go="daily">今日 / 明日</button><button class="quiet" data-go="memory">你记住了什么？</button></div>
+        <div class="quick"><button class="quiet" data-go="daily">任务规划</button><button class="quiet" data-go="memory">你记住了什么？</button></div>
         <form class="compose" id="chatForm"><label class="sr-only" for="chatInput">给 Pi 的消息</label><textarea id="chatInput" rows="2" maxlength="4000" placeholder="跟 Pi 说说你的安排…" required></textarea><button class="primary" id="send" disabled>发送</button></form>
         <p class="footnote" id="chatHint">Pi 不会擅自发指令、批准权限或重启机器。</p>
       </section>
@@ -67,9 +67,9 @@
         <section class="inspector" id="inspector"><h2 id="selectedOffice">选择办公室</h2><p class="muted" id="machineFreshness"></p><div id="taskList"></div></section>
       </section>
       <section id="view-daily" class="view" hidden>
-        <div class="intro"><p class="eyebrow">PI DAILY REVIEW</p><h1>管家日报</h1><p class="muted" id="reportDate"></p></div>
-        <div class="report-toolbar"><label>查看日期<select id="reportPicker" aria-label="日报日期"></select></label><button class="primary" id="generateReport" disabled>让 Pi 总结今天</button></div>
-        <div id="dailyReport" class="daily-report" aria-live="polite"><p class="empty">还没有管家总结。接入模型后，让 Pi 分析今天的进展、阻塞和明日优先事项。</p></div>
+        <div class="intro"><p class="eyebrow">PI TASK PLAN</p><h1>任务规划</h1><p class="muted" id="reportDate"></p></div>
+        <div class="report-toolbar"><label>查看日期<select id="reportPicker" aria-label="任务规划日期"></select></label><button class="primary" id="generateReport" disabled>生成任务规划</button></div>
+        <div id="dailyReport" class="daily-report" aria-live="polite"><p class="empty">还没有任务规划。接入模型后，Pi 会把当前记录整理成可执行的一句话事项。</p></div>
         <details class="report-evidence"><summary>查看工作记录依据（不是管家总结）</summary>
         <p class="report-note">完成以验收记录为准。会话空闲、进程停止，都不代表任务完成。以下为当前记录，并非历史日期快照。</p>
         <section class="report-section"><h2>今日已完成 <small>人工验收</small></h2><div id="reportCompleted"></div></section>

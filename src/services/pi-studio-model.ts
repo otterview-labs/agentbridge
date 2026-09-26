@@ -70,10 +70,10 @@ export function createPiModel(config: PiSettings): StudioModel {
               model: modelId,
               instructions: systemPrompt,
               input: contextFor(input),
-              max_output_tokens: 4000,
+              max_output_tokens: 1800,
             }),
             redirect: 'error',
-            signal: AbortSignal.timeout(60_000),
+            signal: AbortSignal.timeout(180_000),
           });
         } catch {
           throw new ValidationError('管家模型连接失败或超时；请检查网络、地址、密钥和服务额度。');
@@ -109,7 +109,7 @@ export function createPiModel(config: PiSettings): StudioModel {
         getApiKey: () => apiKey,
         streamFn: (m, context, options) => {
           const bounded = {
-            ...options, apiKey, maxTokens: 4000, maxRetryDelayMs: 0,
+            ...options, apiKey, maxTokens: 1800, maxRetryDelayMs: 0,
             // Reject redirects rather than forward credentials to another origin.
             fetch: ((url, init) => fetch(url, { ...init, redirect: 'error' })) as typeof fetch,
           };
@@ -124,7 +124,7 @@ export function createPiModel(config: PiSettings): StudioModel {
         await Promise.race([
           agent.prompt(contextFor(input)),
           new Promise<never>((_, reject) => {
-            timer = setTimeout(() => { agent.abort(); reject(new Error('Pi timeout')); }, 60_000);
+            timer = setTimeout(() => { agent.abort(); reject(new Error('Pi timeout')); }, 180_000);
           }),
         ]);
         const reply = agent.state.messages.findLast(m => m.role === 'assistant');

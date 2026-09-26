@@ -16,6 +16,10 @@ Notable changes to agentBridge are documented here.
   a clearer question/answer task timeline.
 - Android task planning copy that leads with actionable one-sentence items.
 - Queue fallback for Codex Desktop threads that already have an active writer.
+- Hub task-planning generation with bounded state-prioritized context, clearer
+  one-sentence prompts, a 180-second deadline, and a 1,800-token output cap.
+- Recovery of partially generated task-planning JSON so a truncated final string
+  does not discard otherwise valid completed sections.
 
 ### Changed
 
@@ -23,6 +27,7 @@ Notable changes to agentBridge are documented here.
   user actions instead of a generic remote-command failure.
 - Android relays target the local SSH service when deploying an STCP client,
   allowing a public SSH endpoint to differ from the target machine's local port.
+- The Studio UI now calls the saved model analysis “任务规划” instead of “日报”.
 
 ### Changed
 

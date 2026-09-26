@@ -271,7 +271,7 @@
     $('chatHint').textContent = snapshot.model.ready
       ? '发送时会将任务摘要、近期对话和已确认偏好交给配置的模型。不提供命令执行工具。'
       : !shared() ? '本机尚未连接 Hub 管家。请在「连接与模型」中接入。'
-        : 'Pi 尚未配置。打开「连接与模型 → Pi 模型接入」保存配置，即可对话和生成日报。';
+        : 'Pi 尚未配置。打开「连接与模型 → Pi 模型接入」保存配置，即可对话和生成任务规划。';
     $('memoryScope').textContent = !shared() ? '保存在这台手机的应用私有存储，尚未与 Hub 同步。' : '保存在 Hub；Web 和已连接的手机使用同一份记忆。';
     $('reportDate').textContent = `${snapshot.date} · Asia/Shanghai · 基于已保存记录`;
     $('tomorrowDate').textContent = snapshot.tomorrow;
@@ -335,12 +335,12 @@
   function renderDaily(report) {
     $('dailyReport').replaceChildren();
     if (!report) {
-      $('dailyReport').append(el('p', 'empty', '这个日期还没有管家总结。接入模型后，让 Pi 分析今天的成果、阻塞和明日优先事项。'));
+      $('dailyReport').append(el('p', 'empty', '这个日期还没有任务规划。接入模型后，Pi 会整理可执行、可验收的一句话事项。'));
       return;
     }
     $('dailyReport').append(el('p', 'byline', `${report.date} · ${report.model} · 生成于 ${dateLabel(report.generatedAt)}`),
       el('p', 'report-summary', report.content.summary));
-    for (const [key, title] of [['completed', '今日成果'], ['ongoing', '推进中的工作'], ['blockers', '阻塞与风险'], ['tomorrow', '明日优先事项'], ['decisions', '需要你决定']]) {
+    for (const [key, title] of [['completed', '已验收成果'], ['ongoing', '推进中的工作'], ['blockers', '阻塞与风险'], ['tomorrow', '明日优先事项'], ['decisions', '需要你决定']]) {
       if (!report.content[key]?.length) continue;
       const list = el('ul');
       for (const item of report.content[key]) {
@@ -362,18 +362,18 @@
     $('generateReport').disabled = date !== snapshot.date || !snapshot.model.ready;
     $('reportPicker').disabled = true;
     try { const result = await request(`./studio/reports?date=${encodeURIComponent(date)}`); renderDaily(result.reports[0]); clearError(); }
-    catch (error) { failure(error); $('dailyReport').replaceChildren(el('p', 'empty', '该日期日报读取失败，请重新选择日期重试。')); }
+    catch (error) { failure(error); $('dailyReport').replaceChildren(el('p', 'empty', '该日期任务规划读取失败，请重新选择日期重试。')); }
     finally { mutating = false; $('reportPicker').disabled = false; }
   });
   $('generateReport').addEventListener('click', async () => {
     if (!shared() || !snapshot?.model.ready || reporting || sending || mutating || loading) return;
     reporting = true; $('generateReport').disabled = true; $('reportPicker').disabled = true;
-    $('generateReport').textContent = 'Pi 正在归纳…'; notice('正在分析任务、今日对话和用户偏好。生成成功后会保存一份新日报，旧版本保留。');
+    $('generateReport').textContent = '正在生成规划…'; notice('正在分析任务、今日对话和用户偏好。生成成功后会保存一份新任务规划，旧版本保留。');
     try {
       const result = await request('./studio/reports', 'POST', { date: snapshot.date });
-      snapshot.dailyReport = result.report; renderDaily(result.report); clearError(); notice('管家日报已保存，Web 和已连接的手机都可查看。');
-    } catch (error) { failure(error); notice('没有替换旧日报，也没有自动重试。'); }
-    finally { reporting = false; $('generateReport').disabled = !snapshot.model.ready; $('reportPicker').disabled = false; $('generateReport').textContent = '重新生成今日日报'; }
+      snapshot.dailyReport = result.report; renderDaily(result.report); clearError(); notice('任务规划已保存，Web 和已连接的手机都可查看。');
+    } catch (error) { failure(error); notice('没有替换旧任务规划，也没有自动重试。'); }
+    finally { reporting = false; $('generateReport').disabled = !snapshot.model.ready; $('reportPicker').disabled = false; $('generateReport').textContent = '重新生成任务规划'; }
   });
   const providerUrls = { anthropic: 'https://api.anthropic.com', openrouter: 'https://openrouter.ai/api/v1', 'openai-compatible': 'https://api.openai.com/v1' };
   $('modelProvider').addEventListener('change', () => { $('modelBaseUrl').value = providerUrls[$('modelProvider').value]; $('modelKey').value = ''; $('modelStatus').textContent = '已更换提供商，请重新输入此地址使用的密钥。'; });
@@ -411,7 +411,7 @@
   function renderHubSettings() {
     if (!native) return;
     $('hubUrl').value = hub.baseUrl || ''; $('hubShare').checked = Boolean(hub.shareTasks); $('hubHttp').checked = Boolean(hub.allowLocalHttp);
-    $('hubStatus').textContent = hub.connected ? '已连接 Hub：对话、记忆和日报共享。任务摘要仅在允许同步时上传。' : '尚未连接 Hub，当前只使用本机记录。';
+    $('hubStatus').textContent = hub.connected ? '已连接 Hub：对话、记忆和任务规划共享。任务摘要仅在允许同步时上传。' : '尚未连接 Hub，当前只使用本机记录。';
     $('importMemories').disabled = !hub.connected;
     $('hubDisconnect').disabled = !hub.connected;
     $('modelDetails').hidden = !hub.connected;
